@@ -44,6 +44,11 @@ Desktop.ini
 # Keystore files (never commit signing keys)
 *.jks
 *.keystore
+# Exception: the CI fallback keystore used only when no real release keystore is
+# configured via secrets (RELEASE_STORE_FILE etc). Its password is public — see
+# ci/README.md — it exists purely so debug-signed CI builds share one signing
+# identity across runs. Never use it for production/store signing.
+!ci/ci-debug.keystore
 
 # Log files
 *.log

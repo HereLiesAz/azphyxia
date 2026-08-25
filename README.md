@@ -92,13 +92,17 @@ Connect your Stremio account to instantly import your existing addon collection.
 
 - Android Studio (latest stable)
 - JDK 17+
-- Android SDK 34+
+- Android SDK 34+ (compileSdk 36)
 
 ### Steps
 
-1. Clone the repository:
+1. Clone this repository and the [assrender](https://github.com/LumeraD3v/assrender)
+   module as siblings — `settings.gradle.kts` expects assrender at
+   `../assrender/assrender` relative to this repo's root:
    ```bash
-   git clone https://github.com/LumeraD3v/Lumera.git
+   git clone https://github.com/HereLiesAz/Lumera.git
+   git clone https://github.com/LumeraD3v/assrender.git
+   cd Lumera
    ```
 
 2. Open the project in Android Studio
@@ -107,6 +111,18 @@ Connect your Stremio account to instantly import your existing addon collection.
    ```bash
    ./gradlew assembleDebug
    ```
+
+   `./gradlew assembleRelease` also works without any extra setup — it falls
+   back to a fixed, non-secret CI keystore (see [`ci/README.md`](ci/README.md))
+   when no real release keystore is configured.
+
+### Releases
+
+Pushing a tag like `v0.2.0` triggers
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which
+builds a signed release APK and publishes it as a GitHub Release that the
+in-app updater (`AppUpdateManager`) checks against. See
+[`ci/README.md`](ci/README.md) for how release signing is configured.
 
 ## Project Structure
 
