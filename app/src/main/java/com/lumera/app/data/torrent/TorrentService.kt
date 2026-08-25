@@ -221,12 +221,21 @@ class TorrentService : Service() {
 
     override fun onDestroy() {
         downloadJob?.cancel()
-        // Run cleanup synchronously on IO thread — must complete before job is cancelled
-        runBlocking(Dispatchers.IO) {
-            currentMagnet?.let { api.dropTorrent(it) }
-            engine.stop()
-        }
+        val magnetToClean = currentMagnet
         currentMagnet = null
+        // onDestroy() runs on the main thread; blocking it on dropTorrent's HTTP call
+        // and engine.stop() risks an ANR if TorrServer is slow to respond. Run the
+        // cleanup on a background thread instead — nothing here needs to complete
+        // before onDestroy() returns.
+        Thread {
+            try {
+                runBlocking(Dispatchers.IO) {
+                    magnetToClean?.let { api.dropTorrent(it) }
+                    engine.stop()
+                }
+            } catch (_: Exception) {
+            }
+        }.start()
         job.cancel()
         onStreamReady = null
         onStreamError = null

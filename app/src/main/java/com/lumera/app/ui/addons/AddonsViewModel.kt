@@ -111,7 +111,17 @@ class AddonsViewModel @Inject constructor(
     }
 
     fun deleteAddon(transportUrl: String) { viewModelScope.launch { repository.deleteAddon(transportUrl); persistProfileState() } }
-    fun renameAddon(transportUrl: String, newName: String) { viewModelScope.launch { repository.renameAddon(transportUrl, newName); persistProfileState() } }
+
+    fun renameAddon(transportUrl: String, newName: String) {
+        // Apply optimistically so a moveAddon() firing before the Room Flow round-trips
+        // this rename can't overwrite it with the stale nickname it read from _uiState.
+        _uiState.value = _uiState.value.copy(
+            addons = _uiState.value.addons.map {
+                if (it.transportUrl == transportUrl) it.copy(nickname = newName) else it
+            }
+        )
+        viewModelScope.launch { repository.renameAddon(transportUrl, newName); persistProfileState() }
+    }
 
     fun moveAddon(addon: AddonEntity, direction: Int) {
         val currentList = _uiState.value.addons.toMutableList()

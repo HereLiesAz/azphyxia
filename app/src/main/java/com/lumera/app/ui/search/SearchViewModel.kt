@@ -51,6 +51,10 @@ class SearchViewModel @Inject constructor(
     private var isLoadingMoreDiscover = false
     private var pendingDiscoverItems = mutableListOf<MetaItem>()
     private var allFetchedIds = mutableSetOf<String>()
+    // Raw count of items the server has returned across all discover pages so far —
+    // NOT allFetchedIds.size, which under-counts (and desyncs the `skip` cursor) if
+    // a page re-returns an item already seen on a prior page.
+    private var totalDiscoverItemsFromServer = 0
 
     // Discover grid scroll position — survives navigation to details and back
     var discoverScrollIndex: Int = 0
@@ -178,6 +182,7 @@ class SearchViewModel @Inject constructor(
     private fun resetDiscoverBuffer() {
         pendingDiscoverItems.clear()
         allFetchedIds.clear()
+        totalDiscoverItemsFromServer = 0
         discoverScrollIndex = 0
         discoverScrollOffset = 0
     }
@@ -205,6 +210,7 @@ class SearchViewModel @Inject constructor(
                 // Track all fetched IDs for deduplication
                 allFetchedIds.clear()
                 items.forEach { allFetchedIds.add("${it.type}:${it.id}") }
+                totalDiscoverItemsFromServer = items.size
 
                 // Batch: show first DISCOVER_INITIAL_LIMIT, buffer the rest
                 val visible = items.take(DISCOVER_INITIAL_LIMIT)
@@ -256,15 +262,18 @@ class SearchViewModel @Inject constructor(
         isLoadingMoreDiscover = true
         viewModelScope.launch {
             try {
-                // Skip = total fetched count (visible + already consumed from pending)
-                val totalFetched = allFetchedIds.size
+                // Skip = raw count of items the server has returned so far, not the
+                // deduped id-set size — a catalog that re-returns an item across pages
+                // (e.g. re-ranking "trending" sorts) would otherwise under-count and
+                // desync the skip cursor, causing the same page to be re-requested forever.
                 val newItems = repository.fetchDiscoverPage(
                     transportUrl = catalog.transportUrl,
                     type = catalog.type,
                     catalogId = catalog.catalogId,
                     genre = _state.value.selectedGenre,
-                    skip = totalFetched
+                    skip = totalDiscoverItemsFromServer
                 )
+                totalDiscoverItemsFromServer += newItems.size
                 // Deduplicate against all previously fetched items
                 val newUniqueItems = newItems.filter { item ->
                     allFetchedIds.add("${item.type}:${item.id}")

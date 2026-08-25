@@ -112,10 +112,19 @@ class TraktScrobbleManager @Inject constructor(
      * Fix #9: The history entry may not exist yet (saveProgress runs on a 10-sec timer),
      * so we track the ID and retry. PlayerViewModel.saveProgress preserves this flag.
      */
-    private val scrobbledIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
+    // Only needed transiently until the corresponding watch_history row exists (see
+    // markAsScrobbled below), but nothing ever removes an ID from it — bounded with
+    // LRU eviction so it can't grow unbounded over a long-running TV session.
+    private val scrobbledIdsCap = 500
+    private val scrobbledIds = java.util.Collections.synchronizedMap(
+        object : LinkedHashMap<String, Boolean>(16, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Boolean>?) =
+                size > scrobbledIdsCap
+        }
+    )
 
     private suspend fun markAsScrobbled(playbackId: String) {
-        scrobbledIds.add(playbackId)
+        scrobbledIds[playbackId] = true
         val item = dao.getHistoryItem(playbackId)
         if (item != null && !item.scrobbled) {
             dao.upsertHistory(item.copy(scrobbled = true))
@@ -124,7 +133,7 @@ class TraktScrobbleManager @Inject constructor(
     }
 
     /** Check if a playback ID has been scrobbled (for PlayerViewModel to use). */
-    fun isScrobbled(playbackId: String): Boolean = playbackId in scrobbledIds
+    fun isScrobbled(playbackId: String): Boolean = scrobbledIds.containsKey(playbackId)
 
     private fun shouldScrobble(): Boolean = traktAuthManager.getAccessToken() != null
 
