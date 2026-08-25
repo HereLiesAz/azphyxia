@@ -1,0 +1,129 @@
+name: Build and Release APK
+
+# Push a version tag (e.g. `v0.2.0`) to build a signed release APK and publish it
+# as a GitHub Release. AppUpdateManager (app/src/main/java/com/lumera/app/data/update/)
+# polls this repo's releases, so this workflow's release shape must keep matching what
+# it expects: exactly one *.apk asset, and a `SHA-256: <64 hex chars>` line in the
+# release body for checksum verification.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to (re)build and release, e.g. v0.2.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Lumera
+        uses: actions/checkout@v4
+        with:
+          path: Lumera
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      # settings.gradle.kts expects the assrender module as a sibling directory:
+      # project(":assrender").projectDir = file("../assrender/assrender")
+      - name: Checkout assrender (sibling module dependency)
+        uses: actions/checkout@v4
+        with:
+          repository: LumeraD3v/assrender
+          path: assrender
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Grant execute permission for gradlew
+        working-directory: Lumera
+        run: chmod +x gradlew
+
+      - name: Resolve version from tag
+        id: version
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "name=${TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+
+      - name: Decode release keystore
+        if: ${{ secrets.RELEASE_STORE_BASE64 != '' }}
+        working-directory: Lumera
+        run: echo "${{ secrets.RELEASE_STORE_BASE64 }}" | base64 -d > release.keystore
+
+      - name: Build signed release APK
+        working-directory: Lumera
+        env:
+          RELEASE_STORE_FILE: ${{ secrets.RELEASE_STORE_BASE64 != '' && 'release.keystore' || '' }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:assembleRelease --no-daemon \
+            -PversionNameOverride="${{ steps.version.outputs.name }}" \
+            -PversionCodeOverride="${{ steps.version.outputs.code }}"
+
+      - name: Locate and rename APK
+        id: apk
+        working-directory: Lumera
+        run: |
+          set -euo pipefail
+          SRC=$(find app/build/outputs/apk/release -maxdepth 1 -name "*.apk" | head -1)
+          if [ -z "$SRC" ]; then
+            echo "No APK produced under app/build/outputs/apk/release" >&2
+            exit 1
+          fi
+          DEST="Lumera-${{ steps.version.outputs.name }}.apk"
+          cp "$SRC" "$DEST"
+          echo "path=Lumera/$DEST" >> "$GITHUB_OUTPUT"
+          echo "name=$DEST" >> "$GITHUB_OUTPUT"
+
+      - name: Compute SHA-256
+        id: checksum
+        run: |
+          HASH=$(sha256sum "${{ steps.apk.outputs.path }}" | awk '{print $1}')
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog since previous tag
+        id: changelog
+        working-directory: Lumera
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 "${{ steps.version.outputs.tag }}^" 2>/dev/null || echo "")
+          {
+            echo "log<<EOF"
+            if [ -n "$PREV_TAG" ]; then
+              git log "$PREV_TAG..${{ steps.version.outputs.tag }}" --pretty="format:- %s" --no-merges
+            else
+              echo "- Initial release"
+            fi
+            echo ""
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Lumera ${{ steps.version.outputs.name }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.name, '-') }}
+          fail_on_unmatched_files: true
+          files: ${{ steps.apk.outputs.path }}
+          body: |
+            ## Changes
+            ${{ steps.changelog.outputs.log }}
+
+            ---
+            SHA-256: ${{ steps.checksum.outputs.hash }}

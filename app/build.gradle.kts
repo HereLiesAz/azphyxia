@@ -22,6 +22,31 @@ val tmdbApiKey: String = localProperties.getProperty("tmdb.api_key", "")
 val traktClientId: String = localProperties.getProperty("TRAKT_CLIENT_ID", "")
 val traktClientSecret: String = localProperties.getProperty("TRAKT_CLIENT_SECRET", "")
 
+// Release signing. Prefers local.properties (local dev) then falls back to environment
+// variables (CI, see .github/workflows/release.yml) — never committed either way.
+fun releaseSigningProp(propKey: String, envKey: String): String =
+    localProperties.getProperty(propKey) ?: System.getenv(envKey) ?: ""
+
+val releaseStoreFile = releaseSigningProp("release.storeFile", "RELEASE_STORE_FILE")
+val releaseStorePassword = releaseSigningProp("release.storePassword", "RELEASE_STORE_PASSWORD")
+val releaseKeyAlias = releaseSigningProp("release.keyAlias", "RELEASE_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningProp("release.keyPassword", "RELEASE_KEY_PASSWORD")
+val hasReleaseKeystore = releaseStoreFile.isNotBlank() &&
+    releaseStorePassword.isNotBlank() &&
+    releaseKeyAlias.isNotBlank() &&
+    releaseKeyPassword.isNotBlank() &&
+    rootProject.file(releaseStoreFile).exists()
+
+// Fallback used only when no real release keystore is configured (see ci/README.md).
+// Deliberately NOT AGP's implicit `debug` signingConfig: that keystore is generated
+// per-machine on first use, so every ephemeral CI runner would get a different one —
+// breaking Android's same-signer upgrade requirement (and AppUpdateManager's signature
+// check) between consecutive releases. This fixed, checked-in keystore keeps every
+// debug-signed CI build on the same signing identity until a real keystore is added.
+val ciDebugKeystore = rootProject.file("ci/ci-debug.keystore")
+val ciDebugKeystorePassword = "lumera-ci-debug"
+val ciDebugKeystoreAlias = "lumera-ci-debug"
+
 android {
     namespace = "com.lumera.app"
     compileSdk = 36
@@ -30,11 +55,15 @@ android {
         applicationId = "com.lumera.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 9
-        versionName = "0.1.8-beta"
+        // The release workflow overrides these from the pushed tag (-PversionNameOverride)
+        // and the GitHub Actions run number (-PversionCodeOverride) so a published release
+        // actually reports the version it was tagged as, and versionCode keeps increasing —
+        // Android's package installer rejects an upgrade whose versionCode doesn't increase.
+        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toIntOrNull() ?: 9
+        versionName = (project.findProperty("versionNameOverride") as String?) ?: "0.1.8-beta"
 
         // GitHub repository for auto-update system
-        buildConfigField("String", "GITHUB_OWNER", "\"LumeraD3v\"")
+        buildConfigField("String", "GITHUB_OWNER", "\"HereLiesAz\"")
         buildConfigField("String", "GITHUB_REPO", "\"Lumera\"")
 
         // ACRA crash reporting (loaded from local.properties)
@@ -57,6 +86,22 @@ android {
         }
     }
 
+    signingConfigs {
+        create("release") {
+            if (hasReleaseKeystore) {
+                storeFile = rootProject.file(releaseStoreFile)
+                storePassword = releaseStorePassword
+                keyAlias = releaseKeyAlias
+                keyPassword = releaseKeyPassword
+            } else {
+                storeFile = ciDebugKeystore
+                storePassword = ciDebugKeystorePassword
+                keyAlias = ciDebugKeystoreAlias
+                keyPassword = ciDebugKeystorePassword
+            }
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix = ".test"
@@ -69,6 +114,11 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            // Real keystore when RELEASE_STORE_FILE etc. are configured (see
+            // ci/README.md), otherwise the fixed ci/ci-debug.keystore fallback so
+            // `assembleRelease` still produces an installable, consistently-signed
+            // APK without secrets.
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 
