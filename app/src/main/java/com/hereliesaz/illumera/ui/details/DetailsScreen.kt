@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Dns
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
@@ -533,6 +534,27 @@ fun DetailsScreen(
                             onClick = { viewModel.openEpisodes() }
                         )
 
+                        ExpandableIconButton(
+                            label = "Sources",
+                            icon = Icons.Default.Dns,
+                            onClick = {
+                                val ep = resumeEpisode ?: firstEpisode ?: return@ExpandableIconButton
+                                val trackId = resumePlaybackId ?: episodePlaybackId(streamId, ep)
+                                val epStreamId = episodeStreamId(streamId, ep)
+                                val epTitle = when {
+                                    resumePlaybackId != null && resumeEpisode != null -> episodeDisplayTitle(resumeEpisode)
+                                    resumePlaybackId != null && parsedResumeSeasonEpisode != null ->
+                                        "S${parsedResumeSeasonEpisode.first}:E${parsedResumeSeasonEpisode.second} - ${currentMovie.name}"
+                                    resumePlaybackId != null -> currentMovie.name
+                                    else -> episodeDisplayTitle(ep)
+                                }
+                                pendingPlaybackId = trackId
+                                pendingPlaybackType = type
+                                pendingPlaybackTitle = epTitle
+                                viewModel.loadStreams(type, epStreamId, epTitle, sourceSelectionId = trackId, forceSourcePicker = true)
+                            }
+                        )
+
                         val seriesTrailer = state.tmdbTrailer
                         if (seriesTrailer != null) {
                             ExpandableIconButton(
@@ -576,6 +598,17 @@ fun DetailsScreen(
                                 pendingPlaybackType = type
                                 pendingPlaybackTitle = currentMovie.name
                                 viewModel.loadStreams(type, streamId, currentMovie.name, autoSelectSource = autoSelectSource, rememberSourceSelection = rememberSourceSelection)
+                            }
+                        )
+
+                        ExpandableIconButton(
+                            label = "Sources",
+                            icon = Icons.Default.Dns,
+                            onClick = {
+                                pendingPlaybackId = streamId
+                                pendingPlaybackType = type
+                                pendingPlaybackTitle = currentMovie.name
+                                viewModel.loadStreams(type, streamId, currentMovie.name, forceSourcePicker = true)
                             }
                         )
 
