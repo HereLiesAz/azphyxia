@@ -70,3 +70,19 @@ and add these as **Actions secrets** on the `HereLiesAz/illumera` repo:
 
 `.github/workflows/release.yml` picks them up automatically on the next push
 to `main`.
+
+## Crash report relay (ACRA)
+
+Same story as Trakt: `app/build.gradle.kts` reads `acra.url`/`acra.token`
+from `local.properties` for local dev and falls back to `ACRA_URL`/
+`ACRA_TOKEN` environment variables for CI. Without either, `BuildConfig.ACRA_URL`
+builds in empty and the app's crash reporter (`LumeraApplication.kt`, via ACRA)
+silently has nowhere to send reports.
+
+Add these as **Actions secrets** on the `HereLiesAz/illumera` repo:
+- `ACRA_URL` — the crash-report worker's URL (e.g. `https://lumera-crash-reporter.<subdomain>.workers.dev/crash-report`)
+- `ACRA_TOKEN` — the shared `AUTH_TOKEN` the worker was deployed with
+
+See `../cloudflare-worker/README.md` to deploy the worker itself — it relays
+each report to a GitHub issue on this repo (deduplicated by crash signature),
+with no GitHub sign-in required on-device.

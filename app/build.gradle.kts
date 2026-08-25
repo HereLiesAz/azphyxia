@@ -16,8 +16,12 @@ val localProperties = Properties().apply {
     val localPropsFile = rootProject.file("local.properties")
     if (localPropsFile.exists()) load(localPropsFile.inputStream())
 }
-val acraUrl: String = localProperties.getProperty("acra.url", "")
-val acraToken: String = localProperties.getProperty("acra.token", "")
+// Falls back to environment variables (CI, see .github/workflows/release.yml) so
+// release builds still submit crash reports even without local.properties.
+val acraUrl: String = localProperties.getProperty("acra.url")
+    ?: System.getenv("ACRA_URL") ?: ""
+val acraToken: String = localProperties.getProperty("acra.token")
+    ?: System.getenv("ACRA_TOKEN") ?: ""
 val tmdbApiKey: String = localProperties.getProperty("tmdb.api_key", "")
 // Falls back to environment variables (CI, see .github/workflows/release.yml) so
 // release builds still get real Trakt credentials even without local.properties.
