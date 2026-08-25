@@ -88,6 +88,8 @@ jobs:
           RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
           TRAKT_CLIENT_SECRET: ${{ secrets.TRAKT_CLIENT_SECRET }}
+          ACRA_URL: ${{ secrets.ACRA_URL }}
+          ACRA_TOKEN: ${{ secrets.ACRA_TOKEN }}
         run: |
           ./gradlew :app:assembleRelease --no-daemon \
             -PversionNameOverride="${{ steps.version.outputs.name }}" \
