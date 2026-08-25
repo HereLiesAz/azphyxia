@@ -98,12 +98,12 @@ Connect your Stremio account to instantly import your existing addon collection.
 
 ### Steps
 
-1. Clone this repository and the [assrender](https://github.com/LumeraD3v/assrender)
+1. Clone this repository and the [assrender](https://github.com/HereLiesAz/assrender)
    module as siblings — `settings.gradle.kts` expects assrender at
    `../assrender/assrender` relative to this repo's root:
    ```bash
    git clone https://github.com/HereLiesAz/illumera.git
-   git clone https://github.com/LumeraD3v/assrender.git
+   git clone https://github.com/HereLiesAz/assrender.git
    cd illumera
    ```
 

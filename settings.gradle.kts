@@ -17,4 +17,5 @@ rootProject.name = "illumera"
 include(":app")
 include(":playbackcore")
 include(":assrender")
-project(":assrender").projectDir = file("assrender/assrender")
+// The module is now located directly in the assrender/ folder
+project(":assrender").projectDir = file("assrender")
