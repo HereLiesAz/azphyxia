@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import com.hereliesaz.illumera.data.local.AddonDao
 import com.hereliesaz.illumera.data.model.ProfileEntity
 import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
+import com.hereliesaz.illumera.data.remote.StremioAuthError
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -128,6 +129,40 @@ class ProfileViewModel @Inject constructor(
             try {
                 profileConfigurationManager.initializeFromScratch(profileId)
                 onComplete()
+            } finally {
+                _isInitializingProfile.value = false
+            }
+        }
+    }
+
+    /**
+     * Same as [initializeProfileFromScratch] but also logs in to Stremio with the given
+     * credentials and folds the account's addons into the profile. [onResult] is always
+     * called with `success = true` once the profile is initialized (whether or not the
+     * Stremio login itself succeeded) — `success = false` only reports a Stremio-side
+     * failure via `errorMessage` so the caller can let the user retry instead of moving on.
+     */
+    fun initializeProfileFromScratchWithStremio(
+        profileId: Int,
+        email: String,
+        password: String,
+        onResult: (success: Boolean, errorMessage: String?) -> Unit
+    ) {
+        viewModelScope.launch(Dispatchers.IO + NonCancellable) {
+            _isInitializingProfile.value = true
+            try {
+                val result = profileConfigurationManager.initializeFromScratchWithStremio(profileId, email, password)
+                result.fold(
+                    onSuccess = { onResult(true, null) },
+                    onFailure = { error ->
+                        val message = when (error) {
+                            is StremioAuthError.InvalidCredentials -> "Invalid email or password."
+                            is StremioAuthError.NetworkError -> "Network error. Check your connection and try again."
+                            else -> error.message ?: "Couldn't connect to Stremio."
+                        }
+                        onResult(false, message)
+                    }
+                )
             } finally {
                 _isInitializingProfile.value = false
             }

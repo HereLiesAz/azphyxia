@@ -11,6 +11,7 @@ import com.hereliesaz.illumera.data.model.HubRowEntity
 import com.hereliesaz.illumera.data.model.HubRowItemEntity
 import com.hereliesaz.illumera.data.model.WatchHistoryEntity
 import com.hereliesaz.illumera.data.model.stremio.CatalogManifest
+import com.hereliesaz.illumera.data.remote.StremioAddonEntry
 import com.hereliesaz.illumera.data.repository.AddonRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.firstOrNull
@@ -136,6 +137,104 @@ class ProfileConfigurationManager @Inject constructor(
         stremioAuthManager.copyCredentialsBetweenProfiles(sourceProfileId, targetProfileId)
         copyProfileDisplayAndDashboardConfig(targetProfileId, sourceProfileId)
         clearPendingSetup(targetProfileId)
+    }
+
+    /**
+     * Initializes a fresh profile from scratch (default Cinemeta addon, same as
+     * [initializeFromScratch]), then logs in to Stremio with the given credentials and
+     * folds the account's addon collection into the profile's snapshot so it's ready
+     * as soon as the profile is selected. On login/fetch failure the profile still ends
+     * up initialized with just the default addons — [Result.failure] only signals that
+     * the Stremio side didn't complete, not that setup as a whole failed.
+     */
+    suspend fun initializeFromScratchWithStremio(profileId: Int, email: String, password: String): Result<Int> {
+        val defaultSnapshot = createDefaultRuntimeSnapshot()
+        val loginResult = stremioAuthManager.login(email, password)
+
+        return loginResult.fold(
+            onSuccess = {
+                stremioAuthManager.saveCredentialsForProfile(profileId)
+                val addonsResult = stremioAuthManager.fetchAddons()
+                addonsResult.fold(
+                    onSuccess = { entries ->
+                        val fetched = buildSnapshotFromStremioAddons(entries)
+                        writeSnapshot(
+                            profileId,
+                            defaultSnapshot.copy(
+                                addons = defaultSnapshot.addons + fetched.addons,
+                                catalogConfigs = defaultSnapshot.catalogConfigs + fetched.catalogConfigs
+                            )
+                        )
+                        clearPendingSetup(profileId)
+                        Result.success(fetched.addons.size)
+                    },
+                    onFailure = { error ->
+                        writeSnapshot(profileId, defaultSnapshot)
+                        clearPendingSetup(profileId)
+                        Result.failure(error)
+                    }
+                )
+            },
+            onFailure = { error ->
+                stremioAuthManager.clearCredentialsForProfile(profileId)
+                writeSnapshot(profileId, defaultSnapshot)
+                clearPendingSetup(profileId)
+                Result.failure(error)
+            }
+        )
+    }
+
+    /** Fetches the full manifest for each Stremio addon entry and builds installable snapshot rows. */
+    private suspend fun buildSnapshotFromStremioAddons(entries: List<StremioAddonEntry>): ProfileRuntimeSnapshot {
+        val addons = mutableListOf<AddonEntity>()
+        val configs = mutableListOf<CatalogConfigEntity>()
+
+        entries.forEach { entry ->
+            val transportUrl = entry.transportUrl.removeSuffix("/manifest.json").trimEnd('/')
+            // Every fresh profile already gets the default Cinemeta addon — skip a duplicate.
+            if (transportUrl == DEFAULT_CINEMETA_TRANSPORT_URL) return@forEach
+
+            val manifest = runCatching {
+                addonRepository.fetchManifest("$transportUrl/manifest.json")
+            }.getOrNull() ?: return@forEach
+            val catalogs = manifest.catalogs.orEmpty()
+            val addonName = manifest.name.ifBlank { entry.manifest?.name ?: "Unknown Addon" }
+
+            addons += AddonEntity(
+                transportUrl = transportUrl,
+                id = manifest.id,
+                name = addonName,
+                version = manifest.version,
+                description = manifest.description,
+                iconUrl = manifest.logo,
+                isTrusted = false,
+                isEnabled = true,
+                nickname = null,
+                catalogsJson = gson.toJson(catalogs)
+            )
+
+            configs += catalogs.mapIndexed { index, catalog ->
+                val isMovie = catalog.type == "movie"
+                val isSeries = catalog.type == "series"
+                CatalogConfigEntity(
+                    uniqueId = "$transportUrl/${catalog.type}/${catalog.id}",
+                    transportUrl = transportUrl,
+                    addonName = addonName,
+                    catalogType = catalog.type,
+                    catalogId = catalog.id,
+                    catalogName = catalog.name,
+                    customTitle = null,
+                    showInHome = true,
+                    showInMovies = isMovie,
+                    showInSeries = isSeries,
+                    homeOrder = 999,
+                    moviesOrder = if (isMovie) index else 999,
+                    seriesOrder = if (isSeries) index else 999
+                )
+            }
+        }
+
+        return ProfileRuntimeSnapshot(addons = addons, catalogConfigs = configs)
     }
 
     fun deleteProfileState(profileId: Int) {
