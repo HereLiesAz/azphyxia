@@ -4,8 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hereliesaz.illumera.data.auth.StremioAuthManager
 import com.hereliesaz.illumera.data.auth.StremioConnectionState
+import com.hereliesaz.illumera.data.debrid.DebridManager
 import com.hereliesaz.illumera.data.local.AddonDao
 import com.hereliesaz.illumera.data.model.StremioAddonItem
+import com.hereliesaz.illumera.data.model.debrid.DebridProvider
+import com.hereliesaz.illumera.data.model.debrid.DebridResult
 import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
 import com.hereliesaz.illumera.data.remote.StremioAuthError
 import com.hereliesaz.illumera.data.repository.AddonRepository
@@ -29,6 +32,8 @@ sealed class IntegrationsEvent {
     data class LoginError(val message: String) : IntegrationsEvent()
     data class SyncComplete(val count: Int) : IntegrationsEvent()
     object Disconnected : IntegrationsEvent()
+    data class DebridConnected(val provider: DebridProvider) : IntegrationsEvent()
+    data class DebridError(val message: String) : IntegrationsEvent()
 }
 
 data class IntegrationsUiState(
@@ -38,7 +43,10 @@ data class IntegrationsUiState(
     val tmdbEnabled: Boolean = false,
     val tmdbLanguage: String = "",
     val traktConnected: Boolean = false,
-    val traktAuthState: DeviceAuthState = DeviceAuthState.Idle
+    val traktAuthState: DeviceAuthState = DeviceAuthState.Idle,
+    val debridProvider: DebridProvider? = null,
+    val debridUsername: String? = null,
+    val debridConnecting: Boolean = false
 )
 
 @HiltViewModel
@@ -48,7 +56,8 @@ class IntegrationsViewModel @Inject constructor(
     private val profileConfigurationManager: ProfileConfigurationManager,
     private val dao: AddonDao,
     private val traktAuthManager: TraktAuthManager,
-    private val traktSyncManager: TraktSyncManager
+    private val traktSyncManager: TraktSyncManager,
+    private val debridManager: DebridManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(IntegrationsUiState())
@@ -77,6 +86,17 @@ class IntegrationsViewModel @Inject constructor(
                 if (authState is DeviceAuthState.Success) {
                     traktSyncManager.initialSync()
                 }
+            }
+        }
+        // Observe Debrid connection state
+        viewModelScope.launch {
+            debridManager.connectedProvider.collect { provider ->
+                _uiState.value = _uiState.value.copy(debridProvider = provider)
+            }
+        }
+        viewModelScope.launch {
+            debridManager.connectedUsername.collect { username ->
+                _uiState.value = _uiState.value.copy(debridUsername = username)
             }
         }
         // Load TMDB settings from active profile
@@ -259,5 +279,27 @@ class IntegrationsViewModel @Inject constructor(
 
     fun resetTraktAuthState() {
         traktAuthManager.resetAuthState()
+    }
+
+    // ── Debrid ──
+
+    fun connectDebrid(provider: DebridProvider, apiKey: String) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(debridConnecting = true)
+            when (val result = debridManager.connect(provider, apiKey)) {
+                is DebridResult.Success -> {
+                    _uiState.value = _uiState.value.copy(debridConnecting = false)
+                    _events.send(IntegrationsEvent.DebridConnected(provider))
+                }
+                is DebridResult.Failure -> {
+                    _uiState.value = _uiState.value.copy(debridConnecting = false)
+                    _events.send(IntegrationsEvent.DebridError(result.message))
+                }
+            }
+        }
+    }
+
+    fun disconnectDebrid() {
+        debridManager.disconnect()
     }
 }

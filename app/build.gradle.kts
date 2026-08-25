@@ -19,8 +19,12 @@ val localProperties = Properties().apply {
 val acraUrl: String = localProperties.getProperty("acra.url", "")
 val acraToken: String = localProperties.getProperty("acra.token", "")
 val tmdbApiKey: String = localProperties.getProperty("tmdb.api_key", "")
-val traktClientId: String = localProperties.getProperty("TRAKT_CLIENT_ID", "")
-val traktClientSecret: String = localProperties.getProperty("TRAKT_CLIENT_SECRET", "")
+// Falls back to environment variables (CI, see .github/workflows/release.yml) so
+// release builds still get real Trakt credentials even without local.properties.
+val traktClientId: String = localProperties.getProperty("TRAKT_CLIENT_ID")
+    ?: System.getenv("TRAKT_CLIENT_ID") ?: ""
+val traktClientSecret: String = localProperties.getProperty("TRAKT_CLIENT_SECRET")
+    ?: System.getenv("TRAKT_CLIENT_SECRET") ?: ""
 
 // Release signing. Prefers local.properties (local dev) then falls back to environment
 // variables (CI, see .github/workflows/release.yml) — never committed either way.
