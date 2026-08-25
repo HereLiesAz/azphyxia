@@ -2,13 +2,12 @@ import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
-    id("com.android.application")
-    id("org.jetbrains.kotlin.android")
+    alias(libs.plugins.android.application)
     // Apply the Compose Compiler plugin
     alias(libs.plugins.kotlin.compose)
 
     alias(libs.plugins.ksp)
-    id("com.google.dagger.hilt.android")
+    alias(libs.plugins.hilt)
 
 }
 
@@ -45,15 +44,15 @@ val hasReleaseKeystore = releaseStoreFile.isNotBlank() &&
 // check) between consecutive releases. This fixed, checked-in keystore keeps every
 // debug-signed CI build on the same signing identity until a real keystore is added.
 val ciDebugKeystore = rootProject.file("ci/ci-debug.keystore")
-val ciDebugKeystorePassword = "lumera-ci-debug"
-val ciDebugKeystoreAlias = "lumera-ci-debug"
+val ciDebugKeystorePassword = "azphyxia-ci-debug"
+val ciDebugKeystoreAlias = "azphyxia-ci-debug"
 
 android {
     namespace = "com.lumera.app"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.lumera.app"
+        applicationId = "com.azphyxia.app"
         minSdk = 26
         targetSdk = 34
         // The release workflow overrides these from the pushed tag (-PversionNameOverride)
@@ -65,7 +64,7 @@ android {
 
         // GitHub repository for auto-update system
         buildConfigField("String", "GITHUB_OWNER", "\"HereLiesAz\"")
-        buildConfigField("String", "GITHUB_REPO", "\"Lumera\"")
+        buildConfigField("String", "GITHUB_REPO", "\"Azphyxia\"")
 
         // ACRA crash reporting (loaded from local.properties)
         buildConfigField("String", "ACRA_URL", "\"$acraUrl\"")
@@ -106,7 +105,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".test"
-            resValue("string", "app_name", "Lumera Test")
+            resValue("string", "app_name", "Azphyxia Test")
         }
         release {
             isMinifyEnabled = true

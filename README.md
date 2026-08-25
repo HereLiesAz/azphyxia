@@ -1,11 +1,13 @@
-# Lumera
+# Azphyxia
+
+Azphyxia is based on [Lumera](https://github.com/HereLiesAz/Lumera).
 
 A feature-rich Android TV streaming application built with Kotlin and Jetpack Compose for TV.
 
 Browse, discover, and stream content from Stremio-compatible addons.
 Connect your Stremio account to instantly import your existing addon collection.
 
-![Lumera](screenshots/banner.png)
+![Azphyxia](screenshots/banner.png)
 
 ## Screenshots
 
@@ -100,9 +102,9 @@ Connect your Stremio account to instantly import your existing addon collection.
    module as siblings — `settings.gradle.kts` expects assrender at
    `../assrender/assrender` relative to this repo's root:
    ```bash
-   git clone https://github.com/HereLiesAz/Lumera.git
+   git clone https://github.com/HereLiesAz/Azphyxia.git
    git clone https://github.com/LumeraD3v/assrender.git
-   cd Lumera
+   cd Azphyxia
    ```
 
 2. Open the project in Android Studio
@@ -130,9 +132,9 @@ configured.
 ## Project Structure
 
 ```
-Lumera/
+Azphyxia/
 ├── app/                    # Main application module
-│   └── src/main/java/com/lumera/app/
+│   └── src/main/java/com/azphyxia/app/
 │       ├── data/           # Room database, repositories, API services
 │       ├── di/             # Hilt dependency injection modules
 │       ├── domain/         # Domain models
@@ -153,7 +155,7 @@ Lumera/
 
 ## Disclaimer
 
-Lumera is a media client that connects to third-party addons. It does not host, distribute, or provide any copyrighted content. Users are solely responsible for the addons they install and the content they access. This software is intended for streaming media you legally own or have the right to view. The developers do not condone piracy in any form.
+Azphyxia is a media client that connects to third-party addons. It does not host, distribute, or provide any copyrighted content. Users are solely responsible for the addons they install and the content they access. This software is intended for streaming media you legally own or have the right to view. The developers do not condone piracy in any form.
 
 ## License
 
