@@ -12,7 +12,7 @@ keystore (Android Studio's implicit `debug` signing config is generated
 per-machine on first use), so consecutive CI releases would silently stop
 being installable as upgrades over each other.
 
-Its password is intentionally public (`lumera-ci-debug`, for both the
+Its password is intentionally public (`illumera-ci-debug`, for both the
 keystore and the key) — it provides **no security**, only a consistent
 identity for test/debug releases. **Never use it for a real published
 release** you expect users to trust or keep long-term; if this repo's CI
@@ -52,15 +52,3 @@ of the CI fallback, add the same four values to `local.properties` (not
 committed) as `release.storeFile`, `release.storePassword`,
 `release.keyAlias`, `release.keyPassword` — `release.storeFile` should be a
 path to the keystore file, relative to the repo root or absolute.
-
-## Publishing to the Play Store
-
-Set the `PLAY_SERVICE_ACCOUNT_JSON` Actions secret to the full JSON key of a
-Google Play service account (Play Console → Setup → API access) with Release
-Manager permission for this app. Once set, every push to `main` also builds
-a signed `.aab` and uploads it to the Play Console **internal testing**
-track via the `r0adkll/upload-google-play` action. This requires the app to
-already exist in Play Console under `com.hereliesaz.illumera` — create it
-(and its first manual release) there before this secret is set, or the
-upload step will fail. Adjust the `track` in `release.yml` if a different
-track (e.g. `alpha`, `beta`, `production`) is wanted.
