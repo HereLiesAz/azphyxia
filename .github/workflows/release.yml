@@ -1,19 +1,27 @@
 name: Build and Release APK
 
-# Push a version tag (e.g. `v0.2.0`) to build a signed release APK and publish it
-# as a GitHub Release. AppUpdateManager (app/src/main/java/com/lumera/app/data/update/)
-# polls this repo's releases, so this workflow's release shape must keep matching what
-# it expects: exactly one *.apk asset, and a `SHA-256: <64 hex chars>` line in the
-# release body for checksum verification.
+# Every push to main builds a signed release APK and publishes it as a GitHub
+# Release (continuous delivery — no tag needs to be pushed manually). Can also
+# be run by hand from the Actions tab against any branch/commit.
+#
+# AppUpdateManager (app/src/main/java/com/lumera/app/data/update/) polls this
+# repo's *latest* (non-prerelease) release, so this workflow's release shape
+# must keep matching what it expects: exactly one *.apk asset, and a
+# `SHA-256: <64 hex chars>` line in the release body for checksum verification.
+#
+# Versioning: since there's no tag to read a version from, versionName is
+# MAJOR.MINOR (read from app/build.gradle.kts) with the GitHub Actions run
+# number as the patch component, e.g. 0.1.47 — guaranteed to strictly
+# increase every run, which both Android's package installer (versionCode)
+# and AppUpdateManager's version comparison require to recognize an upgrade.
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+    paths-ignore:
+      - "**.md"
+      - "ci/README.md"
   workflow_dispatch:
-    inputs:
-      tag:
-        description: "Existing tag to (re)build and release, e.g. v0.2.0"
-        required: true
 
 permissions:
   contents: write
@@ -26,7 +34,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: Lumera
-          ref: ${{ github.event.inputs.tag || github.ref }}
           fetch-depth: 0
 
       # settings.gradle.kts expects the assrender module as a sibling directory:
@@ -50,12 +57,17 @@ jobs:
         working-directory: Lumera
         run: chmod +x gradlew
 
-      - name: Resolve version from tag
+      - name: Resolve version
         id: version
+        working-directory: Lumera
         run: |
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          set -euo pipefail
+          BASE=$(grep -oP 'versionName = \(project\.findProperty\("versionNameOverride"\) as String\?\) \?: "\K[^"]+' app/build.gradle.kts)
+          MAJOR_MINOR=$(echo "$BASE" | grep -oP '^\d+\.\d+')
+          NAME="${MAJOR_MINOR}.${{ github.run_number }}"
+          TAG="v${NAME}"
+          echo "name=$NAME" >> "$GITHUB_OUTPUT"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          echo "name=${TAG#v}" >> "$GITHUB_OUTPUT"
           echo "code=${{ github.run_number }}" >> "$GITHUB_OUTPUT"
 
       - name: Decode release keystore
@@ -96,15 +108,15 @@ jobs:
           HASH=$(sha256sum "${{ steps.apk.outputs.path }}" | awk '{print $1}')
           echo "hash=$HASH" >> "$GITHUB_OUTPUT"
 
-      - name: Generate changelog since previous tag
+      - name: Generate changelog since previous release
         id: changelog
         working-directory: Lumera
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 "${{ steps.version.outputs.tag }}^" 2>/dev/null || echo "")
+          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
           {
             echo "log<<EOF"
             if [ -n "$PREV_TAG" ]; then
-              git log "$PREV_TAG..${{ steps.version.outputs.tag }}" --pretty="format:- %s" --no-merges
+              git log "$PREV_TAG..HEAD" --pretty="format:- %s" --no-merges
             else
               echo "- Initial release"
             fi
@@ -117,8 +129,9 @@ jobs:
         with:
           tag_name: ${{ steps.version.outputs.tag }}
           name: Lumera ${{ steps.version.outputs.name }}
+          target_commitish: ${{ github.sha }}
           draft: false
-          prerelease: ${{ contains(steps.version.outputs.name, '-') }}
+          prerelease: false
           fail_on_unmatched_files: true
           files: ${{ steps.apk.outputs.path }}
           body: |
