@@ -118,11 +118,14 @@ Connect your Stremio account to instantly import your existing addon collection.
 
 ### Releases
 
-Pushing a tag like `v0.2.0` triggers
+Every push to `main` triggers
 [`.github/workflows/release.yml`](.github/workflows/release.yml), which
 builds a signed release APK and publishes it as a GitHub Release that the
-in-app updater (`AppUpdateManager`) checks against. See
-[`ci/README.md`](ci/README.md) for how release signing is configured.
+in-app updater (`AppUpdateManager`) checks against — no tag needs to be
+pushed manually; the workflow derives a version (`MAJOR.MINOR.<run number>`)
+and tags the release itself. It can also be run by hand from the Actions
+tab. See [`ci/README.md`](ci/README.md) for how release signing is
+configured.
 
 ## Project Structure
 
