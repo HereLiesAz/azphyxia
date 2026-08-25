@@ -179,12 +179,13 @@ dependencies {
     implementation(libs.androidx.activity.compose)
 
     // 2. Networking
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    // Pin explicitly: converter-gson:2.9.0 transitively pulls a very old Gson (2.8.5,
-    // which predates JsonParser.parseString and other APIs this project uses directly).
+    implementation("com.squareup.retrofit2:retrofit:3.0.0")
+    implementation("com.squareup.retrofit2:converter-gson:3.0.0")
+    // Pin explicitly: older converter-gson releases transitively pulled a very old Gson
+    // (2.8.5, which predates JsonParser.parseString and other APIs this project uses
+    // directly) since nothing else in the graph forced a newer version.
     implementation("com.google.code.gson:gson:2.14.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:5.5.0")
 
     // 4. Image Loading
     implementation("io.coil-kt:coil-compose:2.7.0")
@@ -196,8 +197,8 @@ dependencies {
     kapt("androidx.room:room-compiler:2.8.4")
 
     // 6. Dependency Injection
-    implementation("com.google.dagger:hilt-android:2.58")
-    kapt("com.google.dagger:hilt-android-compiler:2.58")
+    implementation("com.google.dagger:hilt-android:2.60.1")
+    kapt("com.google.dagger:hilt-android-compiler:2.60.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.4.0")
 
     // 7. Video Player
@@ -215,7 +216,7 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
 
     // OkHttp is already available via Retrofit, but declare explicitly for TorrServer API
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
 
     // --- LOCAL WEB SERVER (used by remote input hub) ---
     implementation("org.nanohttpd:nanohttpd:2.3.1")
