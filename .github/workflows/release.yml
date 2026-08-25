@@ -2,10 +2,12 @@ name: Build and Release APK
 
 # Every push to main builds a signed release APK and publishes it as a GitHub
 # Release (continuous delivery — no tag needs to be pushed manually). Can also
-# be run by hand from the Actions tab against any branch/commit.
+# be run by hand from the Actions tab against any branch/commit. When
+# PLAY_SERVICE_ACCOUNT_JSON is configured, the same push also builds a signed
+# AAB and uploads it to the Play Console "internal" testing track.
 #
-# AppUpdateManager (app/src/main/java/com/lumera/app/data/update/) polls this
-# repo's *latest* (non-prerelease) release, so this workflow's release shape
+# AppUpdateManager (app/src/main/java/com/hereliesaz/illumera/data/update/) polls
+# this repo's *latest* (non-prerelease) release, so this workflow's release shape
 # must keep matching what it expects: exactly one *.apk asset, and a
 # `SHA-256: <64 hex chars>` line in the release body for checksum verification.
 #
@@ -32,7 +34,8 @@ jobs:
     # `secrets` isn't a valid reference inside `if:` expressions — route it through
     # env first (env: values can reference secrets; `if:` can reference env).
     env:
-      HAS_RELEASE_KEYSTORE: ${{ secrets.RELEASE_STORE_BASE64 != '' }}
+      HAS_RELEASE_KEYSTORE: ${{ secrets.KEYSTORE_RAW != '' }}
+      HAS_PLAY_PUBLISHING: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
     steps:
       - name: Checkout Lumera
         uses: actions/checkout@v4
@@ -77,17 +80,30 @@ jobs:
       - name: Decode release keystore
         if: ${{ env.HAS_RELEASE_KEYSTORE == 'true' }}
         working-directory: Lumera
-        run: echo "${{ secrets.RELEASE_STORE_BASE64 }}" | base64 -d > release.keystore
+        run: echo "${{ secrets.KEYSTORE_RAW }}" | base64 -d > release.keystore
 
       - name: Build signed release APK
         working-directory: Lumera
         env:
           RELEASE_STORE_FILE: ${{ env.HAS_RELEASE_KEYSTORE == 'true' && 'release.keystore' || '' }}
-          RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
-          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
           ./gradlew :app:assembleRelease --no-daemon \
+            -PversionNameOverride="${{ steps.version.outputs.name }}" \
+            -PversionCodeOverride="${{ steps.version.outputs.code }}"
+
+      - name: Build signed release AAB (Play Store)
+        if: ${{ env.HAS_PLAY_PUBLISHING == 'true' }}
+        working-directory: Lumera
+        env:
+          RELEASE_STORE_FILE: ${{ env.HAS_RELEASE_KEYSTORE == 'true' && 'release.keystore' || '' }}
+          RELEASE_STORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew :app:bundleRelease --no-daemon \
             -PversionNameOverride="${{ steps.version.outputs.name }}" \
             -PversionCodeOverride="${{ steps.version.outputs.code }}"
 
@@ -144,3 +160,13 @@ jobs:
 
             ---
             SHA-256: ${{ steps.checksum.outputs.hash }}
+
+      - name: Publish AAB to Play Console (internal track)
+        if: ${{ env.HAS_PLAY_PUBLISHING == 'true' }}
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.hereliesaz.illumera
+          releaseFiles: Lumera/app/build/outputs/bundle/release/*.aab
+          track: internal
+          status: completed

@@ -24,17 +24,24 @@ starts publishing releases meant for real users, add a real release keystore
 1. Generate one (keep it somewhere safe — losing it means you can never sign
    an upgrade to an already-installed release again):
    ```bash
-   keytool -genkeypair -v -keystore release.keystore -alias lumera-release \
+   keytool -genkeypair -v -keystore release.keystore -alias illumera-release \
      -keyalg RSA -keysize 2048 -validity 10000
    ```
 2. Base64-encode it and add these as **Actions secrets** on the
-   `HereLiesAz/Lumera` repo (Settings → Secrets and variables → Actions):
-   - `RELEASE_STORE_BASE64` — output of `base64 -w0 release.keystore`
-   - `RELEASE_STORE_PASSWORD`
-   - `RELEASE_KEY_ALIAS`
-   - `RELEASE_KEY_PASSWORD`
-3. Once all four secrets are set, `.github/workflows/release.yml` picks them
-   up automatically on the next tagged release and stops using
+   `HereLiesAz/illumera` repo (Settings → Secrets and variables → Actions):
+   - `KEYSTORE_RAW` — output of `base64 -w0 release.keystore`
+   - `KEYSTORE_PASSWORD`
+   - `KEY_ALIAS`
+   - `KEY_PASSWORD`
+
+   The following are optional certificate metadata (owner DN, SHA-1/SHA-256
+   fingerprints, exported public/private keys and cert chain) some workflows
+   generate alongside a keystore — handy for things like verifying
+   `assetlinks.json` or enrolling in Play App Signing, but not read by this
+   pipeline: `KEYSTORE_OWNER`, `KEYSTORE_SHA1`, `KEYSTORE_SHA256`,
+   `KEYSTORE_PRIVATE`, `KEYSTORE_PUBLIC`, `KEYSTORE_CHAIN`, `KEYSTORE_RSA`.
+3. Once all four required secrets are set, `.github/workflows/release.yml`
+   picks them up automatically on the next push to `main` and stops using
    `ci-debug.keystore`. Note this is a one-way switch for real users: once
    they've installed a build signed with the real keystore, they can never
    go back to a `ci-debug.keystore`-signed build without uninstalling first
@@ -45,3 +52,15 @@ of the CI fallback, add the same four values to `local.properties` (not
 committed) as `release.storeFile`, `release.storePassword`,
 `release.keyAlias`, `release.keyPassword` — `release.storeFile` should be a
 path to the keystore file, relative to the repo root or absolute.
+
+## Publishing to the Play Store
+
+Set the `PLAY_SERVICE_ACCOUNT_JSON` Actions secret to the full JSON key of a
+Google Play service account (Play Console → Setup → API access) with Release
+Manager permission for this app. Once set, every push to `main` also builds
+a signed `.aab` and uploads it to the Play Console **internal testing**
+track via the `r0adkll/upload-google-play` action. This requires the app to
+already exist in Play Console under `com.hereliesaz.illumera` — create it
+(and its first manual release) there before this secret is set, or the
+upload step will fail. Adjust the `track` in `release.yml` if a different
+track (e.g. `alpha`, `beta`, `production`) is wanted.
