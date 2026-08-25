@@ -52,3 +52,21 @@ of the CI fallback, add the same four values to `local.properties` (not
 committed) as `release.storeFile`, `release.storePassword`,
 `release.keyAlias`, `release.keyPassword` — `release.storeFile` should be a
 path to the keystore file, relative to the repo root or absolute.
+
+## Trakt API credentials
+
+The Trakt integration (device-code login, scrobbling, sync) needs a Trakt API
+app's client ID/secret at build time. Like release signing, `app/build.gradle.kts`
+reads these from `local.properties` (`TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET`,
+for local dev) and falls back to environment variables for CI. Without either,
+they build in as empty strings and every Trakt request — including the device
+code request from Settings → Integrations — fails.
+
+To make CI-built releases work, register an app at
+https://trakt.tv/oauth/applications (redirect URI `urn:ietf:wg:oauth:2.0:oob`)
+and add these as **Actions secrets** on the `HereLiesAz/illumera` repo:
+- `TRAKT_CLIENT_ID`
+- `TRAKT_CLIENT_SECRET`
+
+`.github/workflows/release.yml` picks them up automatically on the next push
+to `main`.

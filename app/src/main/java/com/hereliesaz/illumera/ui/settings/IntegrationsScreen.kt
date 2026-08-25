@@ -55,6 +55,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import com.hereliesaz.illumera.data.auth.StremioConnectionState
+import com.hereliesaz.illumera.data.model.debrid.DebridProvider
 import com.hereliesaz.illumera.data.trakt.DeviceAuthState
 import com.hereliesaz.illumera.remote_input.ServerInfo
 import kotlinx.coroutines.delay
@@ -89,6 +90,12 @@ fun IntegrationsScreen(
                 is IntegrationsEvent.Disconnected -> {
                     Toast.makeText(context, "Disconnected from Stremio", Toast.LENGTH_SHORT).show()
                 }
+                is IntegrationsEvent.DebridConnected -> {
+                    Toast.makeText(context, "Connected to ${event.provider.displayName}", Toast.LENGTH_SHORT).show()
+                }
+                is IntegrationsEvent.DebridError -> {
+                    Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
+                }
             }
         }
     }
@@ -113,6 +120,7 @@ fun IntegrationsScreen(
 
     var showTmdbSettings by remember { mutableStateOf(false) }
     var showTraktDialog by remember { mutableStateOf(false) }
+    var showDebridDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxWidth(),
@@ -172,6 +180,19 @@ fun IntegrationsScreen(
             subtitle = if (state.traktConnected) "Connected" else "Not Connected",
             isConnected = state.traktConnected,
             onClick = { showTraktDialog = true },
+            modifier = goBackModifier
+        )
+
+        Spacer(Modifier.height(12.dp))
+
+        // Debrid Integration Item
+        IntegrationItem(
+            title = "Debrid Service",
+            subtitle = state.debridProvider?.let { provider ->
+                "${provider.displayName}${state.debridUsername?.let { " · $it" } ?: ""}"
+            } ?: "Not Connected",
+            isConnected = state.debridProvider != null,
+            onClick = { showDebridDialog = true },
             modifier = goBackModifier
         )
     }
@@ -247,6 +268,18 @@ fun IntegrationsScreen(
                 showTraktDialog = false
                 viewModel.resetTraktAuthState()
             }
+        )
+    }
+
+    // Debrid Dialog
+    if (showDebridDialog) {
+        DebridDialog(
+            connectedProvider = state.debridProvider,
+            connectedUsername = state.debridUsername,
+            isConnecting = state.debridConnecting,
+            onConnect = { provider, apiKey -> viewModel.connectDebrid(provider, apiKey) },
+            onDisconnect = { viewModel.disconnectDebrid() },
+            onDismiss = { showDebridDialog = false }
         )
     }
 }
@@ -1135,6 +1168,158 @@ private fun IntegrationButton(
             style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
             color = textColor
         )
+    }
+}
+
+// =============================================================================
+// DEBRID DIALOG
+// =============================================================================
+
+@Composable
+private fun DebridDialog(
+    connectedProvider: DebridProvider?,
+    connectedUsername: String?,
+    isConnecting: Boolean,
+    onConnect: (DebridProvider, String) -> Unit,
+    onDisconnect: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    var selectedProvider by remember { mutableStateOf(connectedProvider ?: DebridProvider.REAL_DEBRID) }
+    var apiKey by remember { mutableStateOf("") }
+    val focusRequester = remember { FocusRequester() }
+    val accentColor = MaterialTheme.colorScheme.primary
+
+    LaunchedEffect(Unit) {
+        delay(150)
+        runCatching { focusRequester.requestFocus() }
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            Box(
+                modifier = Modifier
+                    .width(460.dp)
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(MaterialTheme.colorScheme.background)
+                    .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(16.dp))
+                    .imePadding()
+                    .padding(24.dp)
+            ) {
+                Column {
+                    Text(
+                        "Debrid Service",
+                        style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
+                        color = Color.White
+                    )
+                    Text(
+                        "Connect a debrid service to browse and stream your cloud storage from the Library.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+
+                    Spacer(Modifier.height(20.dp))
+
+                    if (connectedProvider != null) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = accentColor, modifier = Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "Connected to ${connectedProvider.displayName}${connectedUsername?.let { " ($it)" } ?: ""}",
+                                color = Color.White,
+                                style = MaterialTheme.typography.bodyLarge
+                            )
+                        }
+
+                        Spacer(Modifier.height(24.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                        ) {
+                            IntegrationButton(
+                                text = "Disconnect",
+                                onClick = onDisconnect,
+                                isDestructive = true,
+                                modifier = Modifier.width(130.dp),
+                                focusRequester = focusRequester
+                            )
+                            IntegrationButton(
+                                text = "Close",
+                                onClick = onDismiss,
+                                modifier = Modifier.width(100.dp)
+                            )
+                        }
+                    } else {
+                        Text(
+                            "Service",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = Color.White.copy(0.8f)
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        // Provider picker: wrapping chips, one per known debrid service.
+                        androidx.compose.foundation.layout.FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            DebridProvider.entries.forEach { provider ->
+                                SettingToggleChip(
+                                    label = provider.displayName,
+                                    isChecked = selectedProvider == provider,
+                                    onCheckedChange = { selectedProvider = provider }
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Text(
+                            "API Key",
+                            style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                            color = Color.White.copy(0.8f)
+                        )
+                        Spacer(Modifier.height(8.dp))
+
+                        IntegrationTextField(
+                            value = apiKey,
+                            onValueChange = { apiKey = it },
+                            placeholder = "Paste your ${selectedProvider.displayName} API key",
+                            isPassword = true,
+                            focusRequester = focusRequester,
+                            modifier = Modifier.fillMaxWidth(),
+                            onDone = {
+                                if (apiKey.isNotBlank() && !isConnecting) onConnect(selectedProvider, apiKey)
+                            }
+                        )
+
+                        Spacer(Modifier.height(24.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
+                        ) {
+                            IntegrationButton(
+                                text = if (isConnecting) "Connecting..." else "Connect",
+                                onClick = { onConnect(selectedProvider, apiKey) },
+                                enabled = apiKey.isNotBlank() && !isConnecting,
+                                isPrimary = true,
+                                modifier = Modifier.width(130.dp)
+                            )
+                            IntegrationButton(
+                                text = "Close",
+                                onClick = onDismiss,
+                                modifier = Modifier.width(100.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

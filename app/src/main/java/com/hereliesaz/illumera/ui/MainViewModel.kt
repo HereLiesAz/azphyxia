@@ -2,6 +2,7 @@ package com.hereliesaz.illumera.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hereliesaz.illumera.data.debrid.DebridManager
 import com.hereliesaz.illumera.data.local.AddonDao
 import com.hereliesaz.illumera.data.model.ProfileEntity
 import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
@@ -22,7 +23,8 @@ class MainViewModel @Inject constructor(
     private val dao: AddonDao,
     private val profileConfigurationManager: ProfileConfigurationManager,
     private val traktAuthManager: TraktAuthManager,
-    private val traktSyncManager: TraktSyncManager
+    private val traktSyncManager: TraktSyncManager,
+    private val debridManager: DebridManager
 ) : ViewModel() {
 
     private val _activeProfile = MutableStateFlow<ProfileEntity?>(null)
@@ -61,6 +63,9 @@ class MainViewModel @Inject constructor(
             traktAuthManager.refreshConnectionState()
             traktSyncManager.resetActivityState()
             startTraktPeriodicSync()
+
+            // Refresh Debrid connection for this profile
+            debridManager.refreshConnectionState()
 
             // Watch for Trakt connection changes (e.g. user connects after login).
             // Cancel any collector from a previous login() call first — otherwise
