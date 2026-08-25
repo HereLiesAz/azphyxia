@@ -2,7 +2,9 @@ package com.lumera.app.data.update
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import androidx.core.content.FileProvider
 import com.google.gson.Gson
 import com.google.gson.annotations.SerializedName
@@ -81,7 +83,7 @@ class AppUpdateManager @Inject constructor(
             val remoteVersion = release.tagName.removePrefix("v")
             val currentVersion = BuildConfig.VERSION_NAME
 
-            if (remoteVersion != currentVersion) {
+            if (isNewerVersion(remoteVersion, currentVersion)) {
                 val apkAsset = release.assets.firstOrNull { it.name.endsWith(".apk") }
                 if (apkAsset != null) {
                     if (!isAllowedDownloadUrl(apkAsset.downloadUrl)) {
@@ -115,6 +117,19 @@ class AppUpdateManager @Inject constructor(
         _state.value = UpdateState.Downloading(0f)
         try {
             val apkFile = withContext(Dispatchers.IO) { downloadApk(apkUrl) }
+            // Defense in depth beyond the checksum above (which is sourced from the
+            // same release response as the download itself, so it only guards
+            // against transit corruption/MITM, not a compromised release). Require
+            // the downloaded APK to be signed with the same certificate as the
+            // currently-installed app — Android's own installer enforces this on
+            // upgrade too, but failing fast here avoids showing an install prompt
+            // for a build that would just be rejected.
+            val signatureOk = withContext(Dispatchers.IO) { verifyApkSignatureMatchesInstalled(apkFile) }
+            if (!signatureOk) {
+                apkFile.delete()
+                _state.value = UpdateState.Error("Downloaded update is not signed with the same key as this app.")
+                return
+            }
             _state.value = UpdateState.ReadyToInstall(apkFile)
             installApk(apkFile)
         } catch (e: Exception) {
@@ -186,6 +201,63 @@ class AppUpdateManager @Inject constructor(
         return apkFile
     }
 
+    /** Signing-certificate SHA-256 hashes for the currently-installed app. */
+    @Suppress("DEPRECATION")
+    private fun installedSigningCertHashes(): Set<String> {
+        val pm = context.packageManager
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val info = pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                val signingInfo = info.signingInfo ?: return emptySet()
+                val certs = if (signingInfo.hasMultipleSigners()) {
+                    signingInfo.apkContentsSigners
+                } else {
+                    signingInfo.signingCertificateHistory
+                }
+                certs.orEmpty().map { sha256Hex(it.toByteArray()) }.toSet()
+            } else {
+                val info = pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES)
+                info.signatures.orEmpty().map { sha256Hex(it.toByteArray()) }.toSet()
+            }
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
+    /** Signing-certificate SHA-256 hashes for an on-disk (not yet installed) APK file. */
+    @Suppress("DEPRECATION")
+    private fun apkSigningCertHashes(apkFile: File): Set<String> {
+        val pm = context.packageManager
+        return try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val info = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNING_CERTIFICATES)
+                val signingInfo = info?.signingInfo ?: return emptySet()
+                val certs = if (signingInfo.hasMultipleSigners()) {
+                    signingInfo.apkContentsSigners
+                } else {
+                    signingInfo.signingCertificateHistory
+                }
+                certs.orEmpty().map { sha256Hex(it.toByteArray()) }.toSet()
+            } else {
+                val info = pm.getPackageArchiveInfo(apkFile.absolutePath, PackageManager.GET_SIGNATURES)
+                info?.signatures.orEmpty().map { sha256Hex(it.toByteArray()) }.toSet()
+            }
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
+    private fun sha256Hex(bytes: ByteArray): String =
+        MessageDigest.getInstance("SHA-256").digest(bytes).joinToString("") { "%02x".format(it) }
+
+    private fun verifyApkSignatureMatchesInstalled(apkFile: File): Boolean {
+        val installed = installedSigningCertHashes()
+        if (installed.isEmpty()) return false
+        val apk = apkSigningCertHashes(apkFile)
+        if (apk.isEmpty()) return false
+        return installed == apk
+    }
+
     private fun installApk(apkFile: File) {
         val uri: Uri = FileProvider.getUriForFile(
             context,
@@ -210,14 +282,40 @@ class AppUpdateManager @Inject constructor(
             "objects.githubusercontent.com"
         )
 
-        /** Validate that the download URL is from a trusted GitHub domain. */
+        /** Validate that the download URL is from a trusted GitHub domain over HTTPS. */
         private fun isAllowedDownloadUrl(url: String): Boolean {
-            val host = try {
-                Uri.parse(url).host?.lowercase()
+            val uri = try {
+                Uri.parse(url)
             } catch (_: Exception) {
-                null
-            } ?: return false
+                return false
+            }
+            if (!uri.scheme.equals("https", ignoreCase = true)) return false
+            val host = uri.host?.lowercase() ?: return false
             return ALLOWED_DOWNLOAD_HOSTS.any { host == it || host.endsWith(".$it") }
+        }
+
+        /**
+         * True only if [remote]'s numeric major.minor.patch is strictly greater than
+         * [current]'s. Comparing by plain string inequality (the previous behavior)
+         * would offer a "downgrade" whenever the latest published release is ever
+         * older than what's installed (a rolled-back release, a dev build ahead of
+         * the public tag), and would nag on every tag-format/suffix difference even
+         * when the underlying version hasn't changed.
+         */
+        private fun isNewerVersion(remote: String, current: String): Boolean {
+            fun parse(v: String): List<Int> =
+                v.substringBefore('-').substringBefore('+')
+                    .split('.')
+                    .map { it.toIntOrNull() ?: 0 }
+            val remoteParts = parse(remote)
+            val currentParts = parse(current)
+            val size = maxOf(remoteParts.size, currentParts.size)
+            for (i in 0 until size) {
+                val r = remoteParts.getOrElse(i) { 0 }
+                val c = currentParts.getOrElse(i) { 0 }
+                if (r != c) return r > c
+            }
+            return false
         }
 
         /** Extract SHA-256 hash from release body. Expected format: `SHA-256: abcdef1234...` */

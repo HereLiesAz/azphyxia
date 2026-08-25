@@ -17,8 +17,11 @@ class TraktAuthInterceptor @Inject constructor(
         private const val TAG = "TraktAuthInterceptor"
     }
 
-    // Fix #14: prevent hammering the refresh endpoint
-    @Volatile private var refreshAttemptedForRequest = false
+    // Guards refreshAccessToken() so concurrent requests (this interceptor is a
+    // @Singleton shared across every call OkHttp dispatches) single-flight a
+    // refresh instead of racing: a thread that loses the lock re-checks the
+    // current token first and only calls the network refresh if it's still stale.
+    private val refreshLock = Any()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         var token = traktAuthManager.getAccessToken()
@@ -26,7 +29,7 @@ class TraktAuthInterceptor @Inject constructor(
         // Fix #7: proactively refresh if token is expired or about to expire
         if (token != null && traktAuthManager.needsRefresh) {
             Log.d(TAG, "Token expiring soon, proactive refresh")
-            val newToken = runBlocking { traktAuthManager.refreshAccessToken() }
+            val newToken = refreshTokenSynchronized(token)
             if (newToken != null) {
                 token = newToken
             }
@@ -35,25 +38,38 @@ class TraktAuthInterceptor @Inject constructor(
         val response = chain.proceed(buildRequest(chain.request(), token))
 
         // If we get a 401, try refreshing the token and retry once
-        if (response.code == 401 && token != null && !refreshAttemptedForRequest) {
+        if (response.code == 401 && token != null) {
             Log.d(TAG, "Got 401, attempting token refresh")
-            refreshAttemptedForRequest = true
             response.close()
 
-            val newToken = runBlocking { traktAuthManager.refreshAccessToken() }
-            refreshAttemptedForRequest = false
+            val newToken = refreshTokenSynchronized(token)
 
-            if (newToken != null) {
+            return if (newToken != null) {
                 Log.d(TAG, "Token refreshed, retrying request")
-                return chain.proceed(buildRequest(chain.request(), newToken))
+                chain.proceed(buildRequest(chain.request(), newToken))
             } else {
                 Log.w(TAG, "Token refresh failed")
                 // Return a new response since we closed the original
-                return chain.proceed(buildRequest(chain.request(), token))
+                chain.proceed(buildRequest(chain.request(), token))
             }
         }
 
         return response
+    }
+
+    /**
+     * Refreshes the Trakt access token, but only one caller performs the actual
+     * network refresh at a time. A caller that was blocked on the lock re-checks
+     * the token first: if another thread already refreshed past [staleToken]
+     * while it waited, it reuses that result instead of refreshing again.
+     */
+    private fun refreshTokenSynchronized(staleToken: String?): String? = synchronized(refreshLock) {
+        val currentToken = traktAuthManager.getAccessToken()
+        if (currentToken != null && currentToken != staleToken) {
+            currentToken
+        } else {
+            runBlocking { traktAuthManager.refreshAccessToken() }
+        }
     }
 
     private fun buildRequest(original: okhttp3.Request, token: String?): okhttp3.Request {

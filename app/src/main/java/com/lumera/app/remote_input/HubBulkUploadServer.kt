@@ -10,6 +10,7 @@ import java.util.UUID
 
 class HubBulkUploadServer(
     port: Int,
+    private val pairingToken: String,
     private val items: List<HubRowItemEntity>,
     private val shape: HubShape,
     private val onImageReceived: (String, ByteArray) -> Unit,
@@ -28,13 +29,18 @@ class HubBulkUploadServer(
 
     override fun serve(session: IHTTPSession): Response {
         val uri = session.uri
+        if (uri == "/ping") return DisconnectBanner.pingResponse()
+        // Require the pairing token from the QR/link URL on every request — proves
+        // the caller actually saw the URL shown on this TV.
+        if (session.parms["pin"] != pairingToken) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
+        }
 
         return when {
             uri == "/" -> servePage()
             uri == "/upload" && session.method == Method.POST -> handleImageUpload(session)
             uri == "/preview" && session.method == Method.GET -> servePreview(session)
             uri == "/delete" && session.method == Method.POST -> handleImageDelete(session)
-            uri == "/ping" -> DisconnectBanner.pingResponse()
             else -> newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not Found")
         }
     }
@@ -255,6 +261,7 @@ class HubBulkUploadServer(
                     var CROP_HEIGHT = $cropHeight;
                     var items = $itemsJson;
                     var previews = {};
+                    var PIN = '${pairingToken}';
 
                     var listView = document.getElementById('list-view');
                     var uploadView = document.getElementById('upload-view');
@@ -298,7 +305,7 @@ class HubBulkUploadServer(
                             var st = item.hasImage ? 'Image uploaded' : 'No Image';
                             var pv = previews[item.id]
                                 ? '<img class="item-preview" src="' + previews[item.id] + '">'
-                                : (item.hasPreview ? '<img class="item-preview" src="/preview?id=' + encodeURIComponent(item.id) + '">' : '');
+                                : (item.hasPreview ? '<img class="item-preview" src="/preview?id=' + encodeURIComponent(item.id) + '&pin=' + PIN + '">' : '');
                             return '<div class="item-card" data-id="' + item.id + '">'
                                 + pv
                                 + '<div class="item-info"><div class="item-title">' + esc(item.title) + '</div>'
@@ -343,7 +350,7 @@ class HubBulkUploadServer(
                     removeBtn.onclick = function() {
                         if (!confirm('Remove the image for this item?')) return;
                         var delForm = new FormData(); delForm.append('csrf_token', '${csrfToken}');
-                        fetch('/delete?id=' + encodeURIComponent(currentItemId), { method: 'POST', body: delForm }).then(function(res) {
+                        fetch('/delete?id=' + encodeURIComponent(currentItemId) + '&pin=' + PIN, { method: 'POST', body: delForm }).then(function(res) {
                             if (res.ok) {
                                 var item = items.find(function(i) { return i.id === currentItemId; });
                                 item.hasImage = false;
@@ -446,7 +453,7 @@ class HubBulkUploadServer(
                         var formData = new FormData();
                         formData.append('image', base64);
                         formData.append('csrf_token', '${csrfToken}');
-                        fetch('/upload?id=' + encodeURIComponent(currentItemId), { method: 'POST', body: formData })
+                        fetch('/upload?id=' + encodeURIComponent(currentItemId) + '&pin=' + PIN, { method: 'POST', body: formData })
                             .then(function(res) {
                                 if (res.ok) {
                                     var item = items.find(function(i) { return i.id === currentItemId; });

@@ -162,7 +162,7 @@ class IntegrationsViewModel @Inject constructor(
                     // Convert to StremioAddonItem with duplicate detection
                     val addonItems = entries.mapNotNull { entry ->
                         val manifest = entry.manifest ?: return@mapNotNull null
-                        val transportUrl = entry.transportUrl.removeSuffix("/manifest.json")
+                        val transportUrl = entry.transportUrl.removeSuffix("/manifest.json").trimEnd('/')
                         val isInstalled = installedUrls.contains(transportUrl)
 
                         StremioAddonItem(

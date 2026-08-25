@@ -70,7 +70,8 @@ class AddonsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                val validUrl = if (url.endsWith("manifest.json")) url else "$url/manifest.json"
+                val trimmedUrl = url.trimEnd('/')
+                val validUrl = if (trimmedUrl.endsWith("manifest.json")) trimmedUrl else "$trimmedUrl/manifest.json"
                 val manifest = repository.fetchManifest(validUrl)
                 val displayableCatalogs = manifest.catalogs.orEmpty().filter { catalog ->
                     val isStandardType = catalog.type == "movie" || catalog.type == "series" || catalog.type == "channel" || catalog.type == "tv"

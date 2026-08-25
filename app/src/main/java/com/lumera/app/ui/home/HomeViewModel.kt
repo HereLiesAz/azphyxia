@@ -555,7 +555,7 @@ class HomeViewModel @Inject constructor(
         if (
             _state.value.loadedScreen == screenName &&
             _state.value.loadedProfileId == currentProfileId &&
-            _state.value.rows.isNotEmpty()
+            (_state.value.rows.isNotEmpty() || _state.value.hubRows.isNotEmpty())
         ) {
             isRestoringPosition = true
             return
@@ -689,8 +689,18 @@ class HomeViewModel @Inject constructor(
                             else -> null
                         }
 
-                        val mixedList = (hubRows + allRows.map { CategoryRow.fromHomeRow(it) })
+                        // Append newly-arrived rows after the ones already rendered instead of
+                        // re-sorting the whole merged list by `order`. Re-sorting can shift an
+                        // already-visible row's position in mixedRows (e.g. a hub row that sat
+                        // after the initial batch can end up before a newly-inserted catalog row
+                        // with a lower `order`), which would invalidate any focus-restoration key
+                        // saved against that row's old index.
+                        val existingIds = currentState.mixedRows.mapTo(mutableSetOf()) { it.id }
+                        val newRows = allRows
+                            .map { CategoryRow.fromHomeRow(it) }
+                            .filter { it.id !in existingIds }
                             .sortedBy { it.order }
+                        val mixedList = currentState.mixedRows + newRows
 
                         currentState.copy(
                             mixedRows = mixedList,

@@ -101,12 +101,20 @@ class ProfileConfigurationManager @Inject constructor(
         } else {
             ProfileRuntimeSnapshot()
         }
+        // Merging (keep-newest) watch history only makes sense when reloading the
+        // SAME profile that's already active in the DB (e.g. recovering from a
+        // crash before the last onStop snapshot was written). On a genuine switch
+        // to a different profile, the DB's watch history belongs to the outgoing
+        // profile and must be fully replaced, not merged in — merging it would leak
+        // that profile's progress/watched-state into the incoming one.
+        val sameProfile = profileId == getLastActiveProfileId()
         dao.replaceRuntimeState(
             addons = snapshot.addons,
             catalogConfigs = snapshot.catalogConfigs,
             hubRows = snapshot.hubRows,
             hubRowItems = snapshot.hubRowItems,
-            watchHistory = snapshot.watchHistory
+            watchHistory = snapshot.watchHistory,
+            mergeWatchHistory = sameProfile
         )
         stremioAuthManager.loadCredentialsForProfile(profileId)
         setLastActiveProfileId(profileId)

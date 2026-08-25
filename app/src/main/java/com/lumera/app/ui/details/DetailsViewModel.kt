@@ -291,31 +291,40 @@ class DetailsViewModel @Inject constructor(
     }
 
     /**
+     * Extracts (season, episode) from a watch-history playback ID of the form
+     * "$seriesId:season:episode" or the legacy "$seriesId:season:episode:streamIndex".
+     * Strips the known seriesId prefix first so this is unambiguous even when
+     * seriesId itself contains colons (e.g. "kitsu:12345").
+     */
+    private fun parseSeasonEpisode(seriesId: String, playbackId: String): Pair<Int, Int>? {
+        val prefix = "$seriesId:"
+        if (!playbackId.startsWith(prefix)) return null
+        val remainder = playbackId.removePrefix(prefix).split(":")
+        if (remainder.size < 2) return null
+        val season = remainder[0].toIntOrNull() ?: return null
+        val episode = remainder[1].toIntOrNull() ?: return null
+        return season to episode
+    }
+
+    /**
      * Build a map of "S{season}:E{episode}" → EpisodeProgress from watch history.
      * Checks both with and without stream index suffix.
      */
     private suspend fun buildEpisodeProgressMap(seriesId: String): Map<String, EpisodeProgress> {
+        // Ordered newest-first (getSeriesEpisodeHistory sorts by lastWatched DESC), so the
+        // first entry seen per season/episode key below is already the most recent one.
         val historyItems = dao.getSeriesEpisodeHistory("$seriesId:%")
         if (historyItems.isEmpty()) return emptyMap()
 
         val map = mutableMapOf<String, EpisodeProgress>()
         for (item in historyItems) {
-            val parts = item.id.split(":")
-            if (parts.size < 3) continue
-            // Extract season and episode from the playback ID
-            val hasStreamIndex = parts.size >= 4 && parts.last().toIntOrNull() != null
-            val season = parts[parts.size - if (hasStreamIndex) 3 else 2].toIntOrNull() ?: continue
-            val episode = parts[parts.size - if (hasStreamIndex) 2 else 1].toIntOrNull() ?: continue
+            val (season, episode) = parseSeasonEpisode(seriesId, item.id) ?: continue
             val key = "S${season}:E${episode}"
-
-            // Keep the most recent entry if there are duplicates
-            val existing = map[key]
-            if (existing == null || (!existing.watched && item.watched)) {
-                map[key] = EpisodeProgress(
-                    progress = item.progress(),
-                    watched = item.watched
-                )
-            }
+            if (map.containsKey(key)) continue
+            map[key] = EpisodeProgress(
+                progress = item.progress(),
+                watched = item.watched
+            )
         }
         return map
     }
@@ -770,13 +779,8 @@ class DetailsViewModel @Inject constructor(
                 val streamId = _state.value.resolvedId ?: meta.id
                 val watchedEpisodes = historyItems.filter { it.watched }
                 for (ep in watchedEpisodes) {
-                    val parts = ep.id.split(":")
-                    if (parts.size >= 3) {
-                        val hasStreamIdx = parts.size >= 4 && parts.last().toIntOrNull() != null
-                        val season = parts[parts.size - if (hasStreamIdx) 3 else 2].toIntOrNull() ?: continue
-                        val episode = parts[parts.size - if (hasStreamIdx) 2 else 1].toIntOrNull() ?: continue
-                        traktSyncManager.pushEpisodeUnwatched(streamId, season, episode)
-                    }
+                    val (season, episode) = parseSeasonEpisode(meta.id, ep.id) ?: continue
+                    traktSyncManager.pushEpisodeUnwatched(streamId, season, episode)
                 }
             }
 

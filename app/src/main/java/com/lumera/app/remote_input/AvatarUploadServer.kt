@@ -12,6 +12,7 @@ import java.util.UUID
  */
 class AvatarUploadServer(
     port: Int,
+    private val pairingToken: String,
     private val onImageReceived: (ByteArray) -> Unit
 ) : NanoHTTPD(port) {
 
@@ -24,6 +25,11 @@ class AvatarUploadServer(
 
     override fun serve(session: IHTTPSession): Response {
         if (session.uri == "/ping") return DisconnectBanner.pingResponse()
+        // Require the pairing token from the QR/link URL on every request — proves
+        // the caller actually saw the URL shown on this TV.
+        if (session.parms["pin"] != pairingToken) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+        }
         return when (session.method) {
             Method.GET -> serveUploadForm()
             Method.POST -> handleImageUpload(session)
@@ -437,7 +443,7 @@ class AvatarUploadServer(
                             formData.append('image', base64Data);
                             formData.append('csrf_token', '${csrfToken}');
 
-                            await fetch('/', { method: 'POST', body: formData });
+                            await fetch('/' + window.location.search, { method: 'POST', body: formData });
                             
                             cropStep.style.display = 'none';
                             successStep.style.display = 'block';

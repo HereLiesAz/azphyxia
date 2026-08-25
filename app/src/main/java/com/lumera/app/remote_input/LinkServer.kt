@@ -12,6 +12,7 @@ import java.util.UUID
  */
 class LinkServer(
     port: Int,
+    private val pairingToken: String,
     private val onLinkReceived: (String) -> Unit
 ) : NanoHTTPD(port) {
 
@@ -20,6 +21,12 @@ class LinkServer(
 
     override fun serve(session: IHTTPSession): Response {
         if (session.uri == "/ping") return DisconnectBanner.pingResponse()
+        // Require the pairing token from the QR/link URL on every request — proves
+        // the caller actually saw the URL shown on this TV, unlike the CSRF token
+        // below (which is only good against forged submissions once you have the page).
+        if (session.parms["pin"] != pairingToken) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+        }
         return when (session.method) {
             Method.GET -> serveForm()
             Method.POST -> handleSubmission(session)
@@ -150,7 +157,7 @@ class LinkServer(
                         btn.textContent = 'Sending...';
                         try {
                             const formData = new FormData(document.getElementById('pasteForm'));
-                            const res = await fetch('/', { method: 'POST', body: formData });
+                            const res = await fetch('/' + window.location.search, { method: 'POST', body: formData });
                             if (!res.ok) throw new Error('Server rejected the request');
                             document.getElementById('form-container').style.display = 'none';
                             document.getElementById('success-container').style.display = 'block';
