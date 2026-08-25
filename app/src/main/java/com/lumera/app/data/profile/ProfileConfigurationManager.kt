@@ -49,6 +49,13 @@ class ProfileConfigurationManager @Inject constructor(
 
     private var startupRuntimeCaptured = false
 
+    /**
+     * Allows captureStartupRuntimeIfNeeded() to run again. Call after runtime
+     * state changes (e.g. an addon sync) that happen before the one-time
+     * startup capture would otherwise permanently skip re-snapshotting.
+     */
+    fun resetStartupCapture() { startupRuntimeCaptured = false }
+
     fun markPendingSetup(profileId: Int) {
         val updated = getPendingSetupIds().toMutableSet().apply { add(profileId.toString()) }
         prefs.edit().putStringSet(KEY_PENDING_SETUP_PROFILES, updated).apply()

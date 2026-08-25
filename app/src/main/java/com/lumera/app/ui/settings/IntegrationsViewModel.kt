@@ -224,6 +224,7 @@ class IntegrationsViewModel @Inject constructor(
             }
 
             profileConfigurationManager.saveActiveRuntimeState()
+            profileConfigurationManager.resetStartupCapture()
             _uiState.value = _uiState.value.copy(isLoading = false)
             _events.send(IntegrationsEvent.SyncComplete(successCount))
         }
