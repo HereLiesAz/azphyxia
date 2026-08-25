@@ -15,6 +15,9 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Edit
@@ -30,12 +33,18 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -169,6 +178,7 @@ fun ProfileSelectorView(
     var showSetupChoiceDialog by remember { mutableStateOf(false) }
     var showCopyFromDialog by remember { mutableStateOf(false) }
     var showScratchConfirmDialog by remember { mutableStateOf(false) }
+    var showStremioConnectDialog by remember { mutableStateOf(false) }
     val isInitializingProfile by viewModel.isInitializingProfile.collectAsState()
 
     Column(
@@ -209,9 +219,8 @@ fun ProfileSelectorView(
                         if (viewModel.needsInitialSetup(profile.id)) {
                             val hasCopySource = profiles.any { it.id != profile.id }
                             if (!hasCopySource) {
-                                viewModel.initializeProfileFromScratch(profile.id) {
-                                    onSelect(profile)
-                                }
+                                setupTargetProfile = profile
+                                showStremioConnectDialog = true
                             } else {
                                 setupTargetProfile = profile
                                 showSetupChoiceDialog = true
@@ -298,11 +307,8 @@ fun ProfileSelectorView(
             profileName = setupTarget.name,
             isLoading = isInitializingProfile,
             onConfirm = {
-                viewModel.initializeProfileFromScratch(setupTarget.id) {
-                    showScratchConfirmDialog = false
-                    setupTargetProfile = null
-                    onSelect(setupTarget)
-                }
+                showScratchConfirmDialog = false
+                showStremioConnectDialog = true
             },
             onBack = {
                 showScratchConfirmDialog = false
@@ -311,6 +317,38 @@ fun ProfileSelectorView(
             onDismiss = {
                 showScratchConfirmDialog = false
                 setupTargetProfile = null
+            }
+        )
+    }
+
+    if (showStremioConnectDialog && setupTarget != null) {
+        StremioConnectDialog(
+            profileName = setupTarget.name,
+            isLoading = isInitializingProfile,
+            onSkip = {
+                viewModel.initializeProfileFromScratch(setupTarget.id) {
+                    showStremioConnectDialog = false
+                    setupTargetProfile = null
+                    onSelect(setupTarget)
+                }
+            },
+            onConnect = { email, password, onError ->
+                viewModel.initializeProfileFromScratchWithStremio(setupTarget.id, email, password) { success, message ->
+                    if (success) {
+                        showStremioConnectDialog = false
+                        setupTargetProfile = null
+                        onSelect(setupTarget)
+                    } else {
+                        onError(message ?: "Couldn't connect to Stremio.")
+                    }
+                }
+            },
+            onDismiss = {
+                viewModel.initializeProfileFromScratch(setupTarget.id) {
+                    showStremioConnectDialog = false
+                    setupTargetProfile = null
+                    onSelect(setupTarget)
+                }
             }
         )
     }
@@ -481,6 +519,140 @@ private fun ScratchConfirmDialog(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun StremioConnectDialog(
+    profileName: String,
+    isLoading: Boolean,
+    onSkip: () -> Unit,
+    onConnect: (email: String, password: String, onError: (String) -> Unit) -> Unit,
+    onDismiss: () -> Unit
+) {
+    var email by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var errorMessage by remember { mutableStateOf<String?>(null) }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .width(520.dp)
+                .clip(RoundedCornerShape(24.dp))
+                .background(Color.Black)
+                .border(2.dp, Color(0xFF333333), RoundedCornerShape(24.dp))
+                .padding(32.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    text = "Connect Stremio",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White
+                )
+                Spacer(Modifier.height(16.dp))
+                Text(
+                    text = "Log in to automatically pull \"$profileName\"'s addons and library from your Stremio account.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.Gray
+                )
+                Spacer(Modifier.height(24.dp))
+
+                ProfileWizardTextField(
+                    value = email,
+                    onValueChange = { email = it; errorMessage = null },
+                    placeholder = "Email",
+                    keyboardType = KeyboardType.Email,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                ProfileWizardTextField(
+                    value = password,
+                    onValueChange = { password = it; errorMessage = null },
+                    placeholder = "Password",
+                    isPassword = true,
+                    keyboardType = KeyboardType.Password,
+                    modifier = Modifier.fillMaxWidth(),
+                    onDone = {
+                        if (email.isNotBlank() && password.isNotBlank() && !isLoading) {
+                            onConnect(email, password) { errorMessage = it }
+                        }
+                    }
+                )
+
+                if (errorMessage != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        text = errorMessage!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFFFF6B6B)
+                    )
+                }
+
+                Spacer(Modifier.height(24.dp))
+                VoidButton(
+                    text = if (isLoading) "Connecting…" else "Connect",
+                    onClick = { onConnect(email, password) { errorMessage = it } },
+                    enabled = !isLoading && email.isNotBlank() && password.isNotBlank(),
+                    isPrimary = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                VoidButton(
+                    text = "Skip for now",
+                    onClick = onSkip,
+                    enabled = !isLoading,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun ProfileWizardTextField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    isPassword: Boolean = false,
+    keyboardType: KeyboardType = KeyboardType.Text,
+    onDone: (() -> Unit)? = null
+) {
+    var isFocused by remember { mutableStateOf(false) }
+
+    val borderBrush = if (isFocused) {
+        Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.primary))
+    } else {
+        SolidColor(Color.White.copy(0.1f))
+    }
+
+    Box(
+        modifier = modifier
+            .height(50.dp)
+            .clip(RoundedCornerShape(8.dp))
+            .background(Color.Black.copy(0.5f))
+            .border(if (isFocused) 2.dp else 1.dp, borderBrush, RoundedCornerShape(8.dp))
+            .padding(horizontal = 16.dp),
+        contentAlignment = Alignment.CenterStart
+    ) {
+        if (value.isEmpty()) Text(placeholder, color = Color.Gray)
+
+        BasicTextField(
+            value = value,
+            onValueChange = onValueChange,
+            textStyle = MaterialTheme.typography.bodyMedium.copy(color = Color.White),
+            cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+            singleLine = true,
+            visualTransformation = if (isPassword) PasswordVisualTransformation() else VisualTransformation.None,
+            keyboardOptions = KeyboardOptions(
+                keyboardType = keyboardType,
+                imeAction = if (onDone != null) ImeAction.Done else ImeAction.Next
+            ),
+            keyboardActions = KeyboardActions(onDone = { onDone?.invoke() }),
+            modifier = Modifier
+                .fillMaxWidth()
+                .onFocusChanged { isFocused = it.isFocused }
+        )
     }
 }
 
