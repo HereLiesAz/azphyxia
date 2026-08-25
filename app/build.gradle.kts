@@ -1,4 +1,5 @@
 import java.util.Properties
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
     id("com.android.application")
@@ -49,7 +50,7 @@ val ciDebugKeystoreAlias = "lumera-ci-debug"
 
 android {
     namespace = "com.lumera.app"
-    compileSdk = 36
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.lumera.app"
@@ -130,12 +131,10 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlinOptions {
-        jvmTarget = "17"
-    }
     buildFeatures {
         compose = true
         buildConfig = true
+        resValues = true
     }
     packaging {
         resources {
@@ -147,18 +146,19 @@ android {
     }
 }
 
-// Compose Compiler configuration for optimal performance
+kotlin {
+    compilerOptions {
+        jvmTarget = JvmTarget.fromTarget("17")
+    }
+}
+
+// Compose Compiler configuration for optimal performance.
+// Strong skipping mode and intrinsic remember are enabled by default in current
+// Compose Compiler versions, so those flags (removed from the DSL) no longer apply.
 composeCompiler {
-    // Enable strong skipping mode for more efficient recomposition
-    // Skips recomposition when parameters are stable even if equals() isn't overridden
-    enableStrongSkippingMode = true
-
-    // Enable intrinsic remember optimization
-    enableIntrinsicRemember = true
-
     // Stability configuration: tells the compiler which classes are effectively immutable
     // so it can skip recomposition when their instances haven't changed
-    stabilityConfigurationFile = project.layout.projectDirectory.file("compose_stability_config.conf")
+    stabilityConfigurationFiles.add(project.layout.projectDirectory.file("compose_stability_config.conf"))
 }
 
 dependencies {
@@ -179,23 +179,27 @@ dependencies {
     implementation(libs.androidx.activity.compose)
 
     // 2. Networking
-    implementation("com.squareup.retrofit2:retrofit:2.9.0")
-    implementation("com.squareup.retrofit2:converter-gson:2.9.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:4.12.0")
+    implementation("com.squareup.retrofit2:retrofit:3.0.0")
+    implementation("com.squareup.retrofit2:converter-gson:3.0.0")
+    // Pin explicitly: older converter-gson releases transitively pulled a very old Gson
+    // (2.8.5, which predates JsonParser.parseString and other APIs this project uses
+    // directly) since nothing else in the graph forced a newer version.
+    implementation("com.google.code.gson:gson:2.14.0")
+    implementation("com.squareup.okhttp3:logging-interceptor:5.5.0")
 
     // 4. Image Loading
     implementation("io.coil-kt:coil-compose:2.7.0")
 
     // 5. Database
-    implementation("androidx.room:room-runtime:2.7.0")
-    implementation("androidx.room:room-ktx:2.7.0")
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
     implementation(libs.androidx.compose.animation.core)
-    kapt("androidx.room:room-compiler:2.7.0")
+    kapt("androidx.room:room-compiler:2.8.4")
 
     // 6. Dependency Injection
-    implementation("com.google.dagger:hilt-android:2.51.1")
-    kapt("com.google.dagger:hilt-android-compiler:2.51.1")
-    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
+    implementation("com.google.dagger:hilt-android:2.60.1")
+    kapt("com.google.dagger:hilt-android-compiler:2.60.1")
+    implementation("androidx.hilt:hilt-navigation-compose:1.4.0")
 
     // 7. Video Player
     implementation(project(":playbackcore"))
@@ -208,23 +212,23 @@ dependencies {
     // 8. Testing & Debugging
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    implementation("androidx.compose.material3:material3:1.2.0")
+    implementation("androidx.compose.material3:material3:1.4.0")
     implementation("androidx.compose.material:material-icons-extended")
 
     // OkHttp is already available via Retrofit, but declare explicitly for TorrServer API
-    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okhttp3:okhttp:5.5.0")
 
     // --- LOCAL WEB SERVER (used by remote input hub) ---
     implementation("org.nanohttpd:nanohttpd:2.3.1")
 
     // --- QR CODE GENERATION ---
-    implementation("com.google.zxing:core:3.5.2")
+    implementation("com.google.zxing:core:3.5.4")
 
     // --- ENCRYPTED SHARED PREFERENCES ---
-    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.security:security-crypto:1.1.0")
 
     // --- CRASH REPORTING (ACRA) ---
-    implementation("ch.acra:acra-http:5.11.4")
-    implementation("ch.acra:acra-toast:5.11.4")
+    implementation("ch.acra:acra-http:5.13.1")
+    implementation("ch.acra:acra-toast:5.13.1")
 
 }

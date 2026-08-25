@@ -1949,12 +1949,12 @@ class MainActivity : ComponentActivity() {
                                 episodes = playerState.currentEpisodeList,
                                 currentPlaybackId = selectedPlaybackId,
                                 onEpisodeSelected = if (playerState.currentEpisodeList.isNotEmpty()) {
-                                    { episode, playerCurrentSourceUrl ->
+                                    episodeSelect@{ episode, playerCurrentSourceUrl ->
                                         // Guard against a double-tap/rapid re-selection firing a second
                                         // independent switch while one is already resolving — whichever
                                         // network call happened to finish last would otherwise win,
                                         // regardless of which episode the user actually intended last.
-                                        if (playerState.isEpisodeSwitchLoading) return@onEpisodeSelected
+                                        if (playerState.isEpisodeSwitchLoading) return@episodeSelect
                                         val epPlaybackId = episodePlaybackId(selectedMovieId, episode)
                                         val epStreamId = episodeStreamId(selectedMovieId, episode)
                                         val epTitle = episodeDisplayTitle(episode)

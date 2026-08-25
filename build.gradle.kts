@@ -6,5 +6,6 @@ plugins {
     alias(libs.plugins.kotlin.compose) apply false
 
     // Hilt (still manual as it is not in the plugin block of toml yet)
-    id("com.google.dagger.hilt.android") version "2.51.1" apply false
+    // 2.59.2+ is required for the Hilt Gradle plugin to work with AGP 9.
+    id("com.google.dagger.hilt.android") version "2.60.1" apply false
 }
