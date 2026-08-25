@@ -1,13 +1,13 @@
-# Azphyxia
+# illumera
 
-Azphyxia is based on [Lumera](https://github.com/HereLiesAz/Lumera).
+illumera is based on [Lumera](https://github.com/HereLiesAz/Lumera).
 
 A feature-rich Android TV streaming application built with Kotlin and Jetpack Compose for TV.
 
 Browse, discover, and stream content from Stremio-compatible addons.
 Connect your Stremio account to instantly import your existing addon collection.
 
-![Azphyxia](screenshots/banner.png)
+![illumera](screenshots/banner.png)
 
 ## Screenshots
 
@@ -102,9 +102,9 @@ Connect your Stremio account to instantly import your existing addon collection.
    module as siblings — `settings.gradle.kts` expects assrender at
    `../assrender/assrender` relative to this repo's root:
    ```bash
-   git clone https://github.com/HereLiesAz/Azphyxia.git
+   git clone https://github.com/HereLiesAz/illumera.git
    git clone https://github.com/LumeraD3v/assrender.git
-   cd Azphyxia
+   cd illumera
    ```
 
 2. Open the project in Android Studio
@@ -132,9 +132,9 @@ configured.
 ## Project Structure
 
 ```
-Azphyxia/
+illumera/
 ├── app/                    # Main application module
-│   └── src/main/java/com/azphyxia/app/
+│   └── src/main/java/com/illumera/app/
 │       ├── data/           # Room database, repositories, API services
 │       ├── di/             # Hilt dependency injection modules
 │       ├── domain/         # Domain models
@@ -155,7 +155,7 @@ Azphyxia/
 
 ## Disclaimer
 
-Azphyxia is a media client that connects to third-party addons. It does not host, distribute, or provide any copyrighted content. Users are solely responsible for the addons they install and the content they access. This software is intended for streaming media you legally own or have the right to view. The developers do not condone piracy in any form.
+illumera is a media client that connects to third-party addons. It does not host, distribute, or provide any copyrighted content. Users are solely responsible for the addons they install and the content they access. This software is intended for streaming media you legally own or have the right to view. The developers do not condone piracy in any form.
 
 ## License
 

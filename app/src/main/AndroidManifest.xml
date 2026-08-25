@@ -24,13 +24,13 @@
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:extractNativeLibs="true"
-        android:theme="@style/Theme.Azphyxia">
+        android:theme="@style/Theme.Illumera">
 
         <activity
             android:name=".MainActivity"
             android:exported="true"
             android:launchMode="singleTask"
-            android:theme="@style/Theme.Azphyxia">
+            android:theme="@style/Theme.Illumera">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />

@@ -13,8 +13,8 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Azphyxia"
+rootProject.name = "illumera"
 include(":app")
 include(":playbackcore")
 include(":assrender")
-project(":assrender")
+project(":assrender").projectDir = file("assrender/assrender")

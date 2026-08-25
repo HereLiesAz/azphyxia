@@ -44,15 +44,15 @@ val hasReleaseKeystore = releaseStoreFile.isNotBlank() &&
 // check) between consecutive releases. This fixed, checked-in keystore keeps every
 // debug-signed CI build on the same signing identity until a real keystore is added.
 val ciDebugKeystore = rootProject.file("ci/ci-debug.keystore")
-val ciDebugKeystorePassword = "azphyxia-ci-debug"
-val ciDebugKeystoreAlias = "azphyxia-ci-debug"
+val ciDebugKeystorePassword = "illumera-ci-debug"
+val ciDebugKeystoreAlias = "illumera-ci-debug"
 
 android {
     namespace = "com.lumera.app"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "com.azphyxia.app"
+        applicationId = "com.hereliesaz.illumera"
         minSdk = 26
         targetSdk = 34
         // The release workflow overrides these from the pushed tag (-PversionNameOverride)
@@ -64,7 +64,7 @@ android {
 
         // GitHub repository for auto-update system
         buildConfigField("String", "GITHUB_OWNER", "\"HereLiesAz\"")
-        buildConfigField("String", "GITHUB_REPO", "\"Azphyxia\"")
+        buildConfigField("String", "GITHUB_REPO", "\"illumera\"")
 
         // ACRA crash reporting (loaded from local.properties)
         buildConfigField("String", "ACRA_URL", "\"$acraUrl\"")
@@ -105,7 +105,7 @@ android {
     buildTypes {
         debug {
             applicationIdSuffix = ".test"
-            resValue("string", "app_name", "Azphyxia Test")
+            resValue("string", "app_name", "illumera Test")
         }
         release {
             isMinifyEnabled = true
@@ -127,8 +127,8 @@ android {
         checkReleaseBuilds = false
     }
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
+        sourceCompatibility = JavaVersion.VERSION_21
+        targetCompatibility = JavaVersion.VERSION_21
     }
     buildFeatures {
         compose = true
@@ -147,7 +147,7 @@ android {
 
 kotlin {
     compilerOptions {
-        jvmTarget = JvmTarget.fromTarget("17")
+        jvmTarget = JvmTarget.fromTarget("21")
     }
 }
 
@@ -178,27 +178,27 @@ dependencies {
     implementation(libs.androidx.activity.compose)
 
     // 2. Networking
-    implementation("com.squareup.retrofit2:retrofit:3.0.0")
-    implementation("com.squareup.retrofit2:converter-gson:3.0.0")
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.converter.gson)
     // Pin explicitly: older converter-gson releases transitively pulled a very old Gson
     // (2.8.5, which predates JsonParser.parseString and other APIs this project uses
     // directly) since nothing else in the graph forced a newer version.
-    implementation("com.google.code.gson:gson:2.14.0")
-    implementation("com.squareup.okhttp3:logging-interceptor:5.5.0")
+    implementation(libs.gson)
+    implementation(libs.okhttp.logging.interceptor)
 
     // 4. Image Loading
-    implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation(libs.coil.compose)
 
     // 5. Database
-    implementation("androidx.room:room-runtime:2.8.4")
-    implementation("androidx.room:room-ktx:2.8.4")
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
     implementation(libs.androidx.compose.animation.core)
-    ksp("androidx.room:room-compiler:2.8.4")
+    ksp(libs.room.compiler)
 
     // 6. Dependency Injection
-    implementation("com.google.dagger:hilt-android:2.60.1")
-    ksp("com.google.dagger:hilt-android-compiler:2.60.1")
-    implementation("androidx.hilt:hilt-navigation-compose:1.4.0")
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.hilt.navigation.compose)
 
     // 7. Video Player
     implementation(project(":playbackcore"))
@@ -211,23 +211,23 @@ dependencies {
     // 8. Testing & Debugging
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-    implementation("androidx.compose.material3:material3:1.4.0")
-    implementation("androidx.compose.material:material-icons-extended")
+    implementation(libs.androidx.compose.material3)
+    implementation(libs.androidx.compose.material.icons.extended)
 
     // OkHttp is already available via Retrofit, but declare explicitly for TorrServer API
-    implementation("com.squareup.okhttp3:okhttp:5.5.0")
+    implementation(libs.okhttp)
 
     // --- LOCAL WEB SERVER (used by remote input hub) ---
-    implementation("org.nanohttpd:nanohttpd:2.3.1")
+    implementation(libs.nanohttpd)
 
     // --- QR CODE GENERATION ---
-    implementation("com.google.zxing:core:3.5.4")
+    implementation(libs.zxing.core)
 
     // --- ENCRYPTED SHARED PREFERENCES ---
-    implementation("androidx.security:security-crypto:1.1.0")
+    implementation(libs.androidx.security.crypto)
 
     // --- CRASH REPORTING (ACRA) ---
-    implementation("ch.acra:acra-http:5.13.1")
-    implementation("ch.acra:acra-toast:5.13.1")
+    implementation(libs.acra.http)
+    implementation(libs.acra.toast)
 
 }
