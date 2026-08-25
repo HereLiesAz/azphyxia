@@ -10,7 +10,7 @@
 # Keep all app classes to prevent R8 class merging/obfuscation issues
 # with Room, Gson, and Hilt. R8 still shrinks unused code and
 # obfuscates third-party libraries.
--keep class com.lumera.app.** { *; }
+-keep class com.hereliesaz.illumera.** { *; }
 
 # ─── Gson ───
 -keep class com.google.gson.reflect.TypeToken { *; }
