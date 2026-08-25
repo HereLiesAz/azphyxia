@@ -48,7 +48,7 @@ val ciDebugKeystorePassword = "illumera-ci-debug"
 val ciDebugKeystoreAlias = "illumera-ci-debug"
 
 android {
-    namespace = "com.lumera.app"
+    namespace = "com.hereliesaz.illumera"
     compileSdk = 37
 
     defaultConfig {
@@ -59,8 +59,8 @@ android {
         // and the GitHub Actions run number (-PversionCodeOverride) so a published release
         // actually reports the version it was tagged as, and versionCode keeps increasing —
         // Android's package installer rejects an upgrade whose versionCode doesn't increase.
-        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toIntOrNull() ?: 9
-        versionName = (project.findProperty("versionNameOverride") as String?) ?: "0.1.8-beta"
+        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toIntOrNull() ?: 10
+        versionName = (project.findProperty("versionNameOverride") as String?) ?: "0.4.1"
 
         // GitHub repository for auto-update system
         buildConfigField("String", "GITHUB_OWNER", "\"HereLiesAz\"")
