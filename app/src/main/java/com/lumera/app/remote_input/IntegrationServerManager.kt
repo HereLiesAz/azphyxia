@@ -28,15 +28,18 @@ class IntegrationServerManager {
             return@withContext null
         }
 
+        val pairingToken = java.util.UUID.randomUUID().toString()
+
         for (port in PORT_START..PORT_END) {
             try {
                 val integrationServer = IntegrationServer(
                     port = port,
+                    pairingToken = pairingToken,
                     onCredentialsReceived = onCredentialsReceived
                 )
                 integrationServer.start()
                 server = integrationServer
-                return@withContext ServerInfo(ip, port)
+                return@withContext ServerInfo(ip, port, pairingToken)
             } catch (e: BindException) {
                 continue
             } catch (e: Exception) {

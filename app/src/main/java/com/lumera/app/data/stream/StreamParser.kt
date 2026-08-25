@@ -10,7 +10,9 @@ object StreamParser {
         Regex("""👤\s*(\d[\d,.]*)"""),
         Regex("""(?i)\bseeds?[:\s]+(\d[\d,.]*)"""),
         Regex("""(?i)\bpeers?[:\s]+(\d[\d,.]*)"""),
-        Regex("""(?i)\bS[:\s]*(\d[\d,.]*)""")
+        // Requires a real separator (space/colon) between "S" and the digits so this
+        // doesn't match a season/episode marker like "S02E05" (no separator there).
+        Regex("""(?i)\bS[:\s]+(\d[\d,.]*)""")
     )
 
     private val sizePattern = Regex("""(\d+(?:\.\d+)?)\s?(KB|MB|GB|TB)""", RegexOption.IGNORE_CASE)

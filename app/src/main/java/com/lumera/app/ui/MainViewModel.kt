@@ -30,6 +30,7 @@ class MainViewModel @Inject constructor(
 
     private var profileJob: Job? = null
     private var traktSyncJob: Job? = null
+    private var traktConnectionWatchJob: Job? = null
     private var activeProfileId: Int? = null
 
     companion object {
@@ -61,8 +62,12 @@ class MainViewModel @Inject constructor(
             traktSyncManager.resetActivityState()
             startTraktPeriodicSync()
 
-            // Watch for Trakt connection changes (e.g. user connects after login)
-            launch {
+            // Watch for Trakt connection changes (e.g. user connects after login).
+            // Cancel any collector from a previous login() call first — otherwise
+            // switching profiles repeatedly leaks one live collector per switch,
+            // each independently reacting to isConnected and causing duplicate syncs.
+            traktConnectionWatchJob?.cancel()
+            traktConnectionWatchJob = launch {
                 traktAuthManager.isConnected.collect { connected ->
                     if (connected && traktSyncJob?.isActive != true) {
                         startTraktPeriodicSync()
@@ -100,6 +105,7 @@ class MainViewModel @Inject constructor(
             activeProfileId = null
             profileJob?.cancel()
             traktSyncJob?.cancel()
+            traktConnectionWatchJob?.cancel()
             _activeProfile.value = null
         }
     }

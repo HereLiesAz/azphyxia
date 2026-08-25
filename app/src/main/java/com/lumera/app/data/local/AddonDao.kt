@@ -107,7 +107,7 @@ interface AddonDao {
     @Query("DELETE FROM watch_history WHERE id = :id")
     suspend fun deleteHistoryItem(id: String)
 
-    @Query("SELECT * FROM watch_history WHERE type = 'series' AND id LIKE :episodePrefix")
+    @Query("SELECT * FROM watch_history WHERE type = 'series' AND id LIKE :episodePrefix ORDER BY lastWatched DESC")
     suspend fun getSeriesEpisodeHistory(episodePrefix: String): List<WatchHistoryEntity>
 
     @Query("DELETE FROM watch_history WHERE type = 'series' AND id LIKE :episodePrefix")
@@ -263,7 +263,12 @@ interface AddonDao {
         catalogConfigs: List<CatalogConfigEntity>,
         hubRows: List<HubRowEntity>,
         hubRowItems: List<HubRowItemEntity>,
-        watchHistory: List<WatchHistoryEntity>
+        watchHistory: List<WatchHistoryEntity>,
+        // true only when reloading the SAME profile already active in the DB (crash
+        // recovery). On a genuine profile switch this must be false: the DB's watch
+        // history belongs to the outgoing profile and merging it in by id would leak
+        // that profile's progress/watched-state into the incoming one.
+        mergeWatchHistory: Boolean
     ) {
         // Replace addon/catalog/hub state from snapshot
         clearHubRowItems()
@@ -276,23 +281,27 @@ interface AddonDao {
         if (hubRows.isNotEmpty()) insertHubRows(hubRows)
         if (hubRowItems.isNotEmpty()) insertHubRowItems(hubRowItems)
 
-        // Merge watch history: keep whichever entry is newer (DB or snapshot).
-        // Prevents a stale snapshot from overwriting progress saved during playback
-        // (e.g., power failure before onStop snapshot could be written).
-        val existing = getAllWatchHistoryOnce().associateBy { it.id }
-        val snapshotMap = watchHistory.associateBy { it.id }
-        val allIds = existing.keys + snapshotMap.keys
-        val merged = allIds.mapNotNull { id ->
-            val db = existing[id]
-            val snap = snapshotMap[id]
-            when {
-                db == null -> snap
-                snap == null -> db
-                snap.lastWatched >= db.lastWatched -> snap
-                else -> db
+        val finalHistory = if (mergeWatchHistory) {
+            // Merge watch history: keep whichever entry is newer (DB or snapshot).
+            // Prevents a stale snapshot from overwriting progress saved during playback
+            // (e.g., power failure before onStop snapshot could be written).
+            val existing = getAllWatchHistoryOnce().associateBy { it.id }
+            val snapshotMap = watchHistory.associateBy { it.id }
+            val allIds = existing.keys + snapshotMap.keys
+            allIds.mapNotNull { id ->
+                val db = existing[id]
+                val snap = snapshotMap[id]
+                when {
+                    db == null -> snap
+                    snap == null -> db
+                    snap.lastWatched >= db.lastWatched -> snap
+                    else -> db
+                }
             }
+        } else {
+            watchHistory
         }
         clearWatchHistory()
-        if (merged.isNotEmpty()) upsertHistoryItems(merged)
+        if (finalHistory.isNotEmpty()) upsertHistoryItems(finalHistory)
     }
 }

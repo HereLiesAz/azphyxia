@@ -353,7 +353,7 @@ class AddonRepository @Inject constructor(
 
     suspend fun installAddonWithConfig(url: String, home: Boolean, movies: Boolean, series: Boolean) = withContext(Dispatchers.IO) {
         val manifest = api.getManifest(url)
-        val transportUrl = url.removeSuffix("/manifest.json")
+        val transportUrl = url.removeSuffix("/manifest.json").trimEnd('/')
         val catalogsJson = gson.toJson(manifest.catalogs.orEmpty())
         val supportsMeta = manifest.resources?.any { element ->
             when {
@@ -437,7 +437,7 @@ class AddonRepository @Inject constructor(
             try {
                 val url = "${preferredAddonBaseUrl.trimEnd('/')}/meta/$type/$id.json"
                 val meta = withTimeout(preferredTimeout) { api.getMeta(url) }.meta.sanitize()
-                if (meta != null) return@withContext meta
+                if (meta != null && meta.id == id) return@withContext meta
             } catch (_: Exception) { /* try fallback */ }
         }
 

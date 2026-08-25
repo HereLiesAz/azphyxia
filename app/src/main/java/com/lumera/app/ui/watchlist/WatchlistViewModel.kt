@@ -22,6 +22,12 @@ class WatchlistViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val resolveInFlight = mutableSetOf<String>()
+    // Cools down retries for items that just failed to resolve, instead of retrying
+    // every one of them on every watchlist mutation (the movieItems/seriesItems
+    // flows re-emit the whole list on any add/remove, which otherwise re-triggers
+    // resolvePosterIfNeeded for every previously-failed item every time).
+    private val lastResolveFailureAt = mutableMapOf<String, Long>()
+    private val resolveFailureCooldownMs = 5 * 60_000L
 
     var lastFocusedKey: String? = null
 
@@ -42,18 +48,25 @@ class WatchlistViewModel @Inject constructor(
      */
     fun resolvePosterIfNeeded(item: MetaItem) {
         if (!item.poster.isNullOrBlank()) return
+        val lastFailure = lastResolveFailureAt[item.id]
+        if (lastFailure != null && System.currentTimeMillis() - lastFailure < resolveFailureCooldownMs) return
         if (!resolveInFlight.add(item.id)) return
 
         viewModelScope.launch(Dispatchers.IO) {
+            var succeeded = false
             try {
-                val meta = repository.resolveMetaDetails(item.type, item.id) ?: return@launch
-                if (!meta.poster.isNullOrBlank()) {
-                    val existing = dao.getWatchlistItem(item.id) ?: return@launch
-                    dao.addToWatchlist(existing.copy(poster = meta.poster))
+                val meta = repository.resolveMetaDetails(item.type, item.id)
+                if (!meta?.poster.isNullOrBlank()) {
+                    val existing = dao.getWatchlistItem(item.id)
+                    if (existing != null) {
+                        dao.addToWatchlist(existing.copy(poster = meta?.poster))
+                        succeeded = true
+                    }
                 }
             } catch (_: Exception) {
             } finally {
                 resolveInFlight.remove(item.id)
+                if (!succeeded) lastResolveFailureAt[item.id] = System.currentTimeMillis()
             }
         }
     }

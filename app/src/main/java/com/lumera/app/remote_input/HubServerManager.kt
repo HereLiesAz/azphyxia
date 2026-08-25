@@ -31,8 +31,10 @@ object HubServerManager {
         stopServer()
 
         return try {
+            val pairingToken = java.util.UUID.randomUUID().toString()
             server = HubBulkUploadServer(
                 port = port,
+                pairingToken = pairingToken,
                 items = items,
                 shape = shape,
                 onImageReceived = onImageReceived,
@@ -41,7 +43,7 @@ object HubServerManager {
             server?.start()
 
             val ip = NetworkUtils.getLocalIpAddress()
-            if (ip != null) "http://$ip:$port" else null
+            if (ip != null) "http://$ip:$port/?pin=$pairingToken" else null
         } catch (e: Exception) {
             if (com.lumera.app.BuildConfig.DEBUG) android.util.Log.w("HubServerManager", "Server start failed", e)
             null

@@ -1670,7 +1670,14 @@ class MainActivity : ComponentActivity() {
                         }
                         if (view == "player") {
                             if (selectedVideoUrl.isBlank() && torrentProgress == null) {
-                                LaunchedEffect(Unit) { activeView = "details" }
+                                // torrentProgress resets to null (plain `remember`) on Activity
+                                // recreation even when a TorrentService download is still running
+                                // (its foreground service survives independently). Stop it here so
+                                // this recovery path doesn't silently abandon an orphaned download.
+                                LaunchedEffect(Unit) {
+                                    stopService(Intent(this@MainActivity, TorrentService::class.java))
+                                    activeView = "details"
+                                }
                             } else {
                             val rememberedTrackSelection = remember(selectedPlaybackId) {
                                 playbackTrackSelectionStore.getSelection(selectedPlaybackId)
@@ -1943,6 +1950,11 @@ class MainActivity : ComponentActivity() {
                                 currentPlaybackId = selectedPlaybackId,
                                 onEpisodeSelected = if (playerState.currentEpisodeList.isNotEmpty()) {
                                     { episode, playerCurrentSourceUrl ->
+                                        // Guard against a double-tap/rapid re-selection firing a second
+                                        // independent switch while one is already resolving — whichever
+                                        // network call happened to finish last would otherwise win,
+                                        // regardless of which episode the user actually intended last.
+                                        if (playerState.isEpisodeSwitchLoading) return@onEpisodeSelected
                                         val epPlaybackId = episodePlaybackId(selectedMovieId, episode)
                                         val epStreamId = episodeStreamId(selectedMovieId, episode)
                                         val epTitle = episodeDisplayTitle(episode)
@@ -1953,9 +1965,8 @@ class MainActivity : ComponentActivity() {
                                             val autoSelect = currentProfile?.autoSelectSource == true
                                             val willAutoResolve = autoplay || autoSelect
 
-                                            if (willAutoResolve) {
-                                                playerState.isEpisodeSwitchLoading = true
-                                            } else {
+                                            playerState.isEpisodeSwitchLoading = true
+                                            if (!willAutoResolve) {
                                                 playerState.pendingEpisodeSwitch = PendingEpisodeSwitch(
                                                     playbackId = epPlaybackId,
                                                     playbackTitle = epTitle,

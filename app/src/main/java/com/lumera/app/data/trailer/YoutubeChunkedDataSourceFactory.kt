@@ -39,6 +39,8 @@ class YoutubeChunkedDataSourceFactory(
         private var currentChunkEnd = 0L
         private var bytesReadInChunk = 0L
         private var originalDataSpec: DataSpec? = null
+        private var shortReadRetries = 0
+        private val maxShortReadRetries = 2
 
         override fun addTransferListener(transferListener: TransferListener) {
             upstream.addTransferListener(transferListener)
@@ -57,27 +59,32 @@ class YoutubeChunkedDataSourceFactory(
         }
 
         private fun openNextChunk(): Long {
-            val spec = originalDataSpec ?: throw IllegalStateException("No DataSpec")
             val end = if (totalContentLength != C.LENGTH_UNSET.toLong()) {
                 minOf(currentChunkStart + chunkSize - 1, currentChunkStart + totalContentLength - 1)
             } else {
                 currentChunkStart + chunkSize - 1
             }
             currentChunkEnd = end
+            shortReadRetries = 0
+            openRange(currentChunkStart, currentChunkEnd)
+            bytesReadInChunk = 0
+            return if (totalContentLength != C.LENGTH_UNSET.toLong()) totalContentLength else C.LENGTH_UNSET.toLong()
+        }
 
+        /** Opens a ranged HTTP request for [start]-[end] against the original spec. */
+        private fun openRange(start: Long, end: Long) {
+            val spec = originalDataSpec ?: throw IllegalStateException("No DataSpec")
             val rangedUri = spec.uri.buildUpon()
-                .appendQueryParameter("range", "$currentChunkStart-$currentChunkEnd")
+                .appendQueryParameter("range", "$start-$end")
                 .build()
 
-            val chunkedSpec = spec.buildUpon()
+            val rangedSpec = spec.buildUpon()
                 .setUri(rangedUri)
                 .setPosition(0)
                 .setLength(C.LENGTH_UNSET.toLong())
                 .build()
 
-            bytesReadInChunk = 0
-            upstream.open(chunkedSpec)
-            return if (totalContentLength != C.LENGTH_UNSET.toLong()) totalContentLength else C.LENGTH_UNSET.toLong()
+            upstream.open(rangedSpec)
         }
 
         override fun read(buffer: ByteArray, offset: Int, length: Int): Int {
@@ -89,6 +96,29 @@ class YoutubeChunkedDataSourceFactory(
                 upstream.close()
 
                 if (chunkBytesReceived < (currentChunkEnd - currentChunkStart + 1)) {
+                    // A short read here means the connection was cut before the range
+                    // we asked for was fully delivered (a network blip, or the CDN
+                    // dropping the connection) — the only chunk that's legitimately
+                    // shorter than requested is the true final chunk, which is capped
+                    // to totalContentLength above and wouldn't hit this branch again
+                    // after a successful retry. Retry the remaining sub-range instead
+                    // of silently reporting end-of-stream and truncating playback.
+                    if (shortReadRetries < maxShortReadRetries) {
+                        shortReadRetries++
+                        val retryStart = currentChunkStart + chunkBytesReceived
+                        return try {
+                            openRange(retryStart, currentChunkEnd)
+                            val retryBytesRead = upstream.read(buffer, offset, length)
+                            if (retryBytesRead > 0) {
+                                bytesReadInChunk += retryBytesRead
+                                shortReadRetries = 0
+                            }
+                            retryBytesRead
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Failed to retry short read at $retryStart: ${e.message}")
+                            C.RESULT_END_OF_INPUT
+                        }
+                    }
                     return C.RESULT_END_OF_INPUT
                 }
 
@@ -100,7 +130,9 @@ class YoutubeChunkedDataSourceFactory(
 
                 return try {
                     openNextChunk()
-                    upstream.read(buffer, offset, length)
+                    val nextBytesRead = upstream.read(buffer, offset, length)
+                    if (nextBytesRead > 0) bytesReadInChunk += nextBytesRead
+                    nextBytesRead
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to open next chunk at $currentChunkStart: ${e.message}")
                     C.RESULT_END_OF_INPUT

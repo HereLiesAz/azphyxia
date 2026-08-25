@@ -9,9 +9,14 @@ import java.net.BindException
  */
 data class ServerInfo(
     val ip: String,
-    val port: Int
+    val port: Int,
+    // Random per-session pairing token. Only a client that scans/sees the URL
+    // this token is embedded in (i.e. has visual access to this TV) can reach
+    // the server's content — a CSRF token alone doesn't prove that, since it's
+    // served to anyone who requests the page.
+    val pairingToken: String
 ) {
-    val url: String get() = "http://$ip:$port"
+    val url: String get() = "http://$ip:$port/?pin=$pairingToken"
 }
 
 /**
@@ -38,13 +43,15 @@ class ServerManager {
             return@withContext null
         }
 
+        val pairingToken = java.util.UUID.randomUUID().toString()
+
         // Try ports in range
         for (port in PORT_START..PORT_END) {
             try {
-                val linkServer = LinkServer(port, onLinkReceived)
+                val linkServer = LinkServer(port, pairingToken, onLinkReceived)
                 linkServer.start()
                 server = linkServer
-                return@withContext ServerInfo(ip, port)
+                return@withContext ServerInfo(ip, port, pairingToken)
             } catch (e: BindException) {
                 // Port in use, try next
                 continue

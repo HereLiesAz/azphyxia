@@ -265,10 +265,15 @@ class TmdbMetadataService @Inject constructor(
         val numericId = tmdbId.toIntOrNull() ?: return@withContext emptyList()
 
         try {
-            val recommendations = when (tmdbType) {
-                "tv" -> tmdbApi.getTvRecommendations(numericId, apiKey, normalizedLanguage).body()
-                else -> tmdbApi.getMovieRecommendations(numericId, apiKey, normalizedLanguage).body()
+            val response = when (tmdbType) {
+                "tv" -> tmdbApi.getTvRecommendations(numericId, apiKey, normalizedLanguage)
+                else -> tmdbApi.getMovieRecommendations(numericId, apiKey, normalizedLanguage)
             }
+            // Don't cache a failed (e.g. rate-limited) response as if it were a
+            // legitimate empty result — that would memoize "no recommendations"
+            // forever in this process-lifetime, no-TTL cache.
+            if (!response.isSuccessful) return@withContext emptyList()
+            val recommendations = response.body()
 
             val rawResults = recommendations?.results.orEmpty().filter { it.id > 0 }
             val languageCode = normalizedLanguage.substringBefore("-")
@@ -329,7 +334,10 @@ class TmdbMetadataService @Inject constructor(
         collectionCache[cacheKey]?.let { return@withContext it }
 
         try {
-            val collection = tmdbApi.getCollectionDetails(collectionId, apiKey, normalizedLanguage).body()
+            val response = tmdbApi.getCollectionDetails(collectionId, apiKey, normalizedLanguage)
+            // Don't cache a failed (e.g. rate-limited) response as "no collection" forever.
+            if (!response.isSuccessful) return@withContext emptyList()
+            val collection = response.body()
             val parts = collection?.parts.orEmpty().sortedBy { it.releaseDate ?: "9999" }
 
             val items = parts.mapNotNull { part ->

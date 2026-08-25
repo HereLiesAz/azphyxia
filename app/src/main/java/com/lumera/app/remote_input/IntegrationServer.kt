@@ -13,6 +13,7 @@ import java.util.UUID
  */
 class IntegrationServer(
     port: Int,
+    private val pairingToken: String,
     private val onCredentialsReceived: (email: String, password: String) -> Unit
 ) : NanoHTTPD(port) {
 
@@ -26,6 +27,13 @@ class IntegrationServer(
 
     override fun serve(session: IHTTPSession): Response {
         if (session.uri == "/ping") return DisconnectBanner.pingResponse()
+        // Require the pairing token from the QR/link URL on every request — proves
+        // the caller actually saw the URL shown on this TV, unlike the CSRF token
+        // below (which only protects against a forged submission once you already
+        // have the page — anyone on the LAN could otherwise just GET / for it).
+        if (session.parms["pin"] != pairingToken) {
+            return newFixedLengthResponse(Response.Status.NOT_FOUND, MIME_PLAINTEXT, "Not found")
+        }
         return when {
             session.method == Method.GET && session.uri == "/" -> serveLoginForm()
             session.method == Method.POST && session.uri == "/login" -> handleLogin(session)
@@ -191,7 +199,7 @@ class IntegrationServer(
                         </form>
                         
                         <div class="info">
-                            <p>🔒 Your credentials are sent directly to your TV over your local network. They are not stored on any server.</p>
+                            <p>This page is unique to this session — only send your credentials here if you scanned this link's QR code or opened it from your TV. They are not stored on any server, but this local connection is not encrypted, so avoid using this on a network you don't trust.</p>
                         </div>
                     </div>
                     
@@ -220,7 +228,7 @@ class IntegrationServer(
                         try {
                             const formData = new FormData(document.getElementById('loginForm'));
 
-                            const response = await fetch('/login', {
+                            const response = await fetch('/login' + window.location.search, {
                                 method: 'POST',
                                 body: formData
                             });

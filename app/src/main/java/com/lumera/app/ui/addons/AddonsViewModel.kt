@@ -70,7 +70,8 @@ class AddonsViewModel @Inject constructor(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
-                val validUrl = if (url.endsWith("manifest.json")) url else "$url/manifest.json"
+                val trimmedUrl = url.trimEnd('/')
+                val validUrl = if (trimmedUrl.endsWith("manifest.json")) trimmedUrl else "$trimmedUrl/manifest.json"
                 val manifest = repository.fetchManifest(validUrl)
                 val displayableCatalogs = manifest.catalogs.orEmpty().filter { catalog ->
                     val isStandardType = catalog.type == "movie" || catalog.type == "series" || catalog.type == "channel" || catalog.type == "tv"
@@ -110,7 +111,17 @@ class AddonsViewModel @Inject constructor(
     }
 
     fun deleteAddon(transportUrl: String) { viewModelScope.launch { repository.deleteAddon(transportUrl); persistProfileState() } }
-    fun renameAddon(transportUrl: String, newName: String) { viewModelScope.launch { repository.renameAddon(transportUrl, newName); persistProfileState() } }
+
+    fun renameAddon(transportUrl: String, newName: String) {
+        // Apply optimistically so a moveAddon() firing before the Room Flow round-trips
+        // this rename can't overwrite it with the stale nickname it read from _uiState.
+        _uiState.value = _uiState.value.copy(
+            addons = _uiState.value.addons.map {
+                if (it.transportUrl == transportUrl) it.copy(nickname = newName) else it
+            }
+        )
+        viewModelScope.launch { repository.renameAddon(transportUrl, newName); persistProfileState() }
+    }
 
     fun moveAddon(addon: AddonEntity, direction: Int) {
         val currentList = _uiState.value.addons.toMutableList()

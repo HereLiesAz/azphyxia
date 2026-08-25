@@ -28,13 +28,15 @@ class AvatarServerManager {
             return@withContext null
         }
 
+        val pairingToken = java.util.UUID.randomUUID().toString()
+
         // Try ports in range
         for (port in PORT_START..PORT_END) {
             try {
-                val avatarServer = AvatarUploadServer(port, onImageReceived)
+                val avatarServer = AvatarUploadServer(port, pairingToken, onImageReceived)
                 avatarServer.start()
                 server = avatarServer
-                return@withContext ServerInfo(ip, port)
+                return@withContext ServerInfo(ip, port, pairingToken)
             } catch (e: BindException) {
                 // Port in use, try next
                 continue
