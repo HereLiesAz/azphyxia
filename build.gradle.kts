@@ -8,4 +8,9 @@ plugins {
     // Hilt (still manual as it is not in the plugin block of toml yet)
     // 2.59.2+ is required for the Hilt Gradle plugin to work with AGP 9.
     id("com.google.dagger.hilt.android") version "2.60.1" apply false
+
+    // KSP (Kotlin Symbol Processing) — replaces kapt for Room/Hilt annotation processing.
+    // kapt doesn't support Kotlin 2.4.x's metadata format, and JetBrains has been
+    // deprecating kapt in favor of KSP anyway.
+    alias(libs.plugins.ksp) apply false
 }

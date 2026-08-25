@@ -7,7 +7,7 @@ plugins {
     // Apply the Compose Compiler plugin
     alias(libs.plugins.kotlin.compose)
 
-    id("kotlin-kapt")
+    alias(libs.plugins.ksp)
     id("com.google.dagger.hilt.android")
 
 }
@@ -194,11 +194,11 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.4")
     implementation("androidx.room:room-ktx:2.8.4")
     implementation(libs.androidx.compose.animation.core)
-    kapt("androidx.room:room-compiler:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
     // 6. Dependency Injection
     implementation("com.google.dagger:hilt-android:2.60.1")
-    kapt("com.google.dagger:hilt-android-compiler:2.60.1")
+    ksp("com.google.dagger:hilt-android-compiler:2.60.1")
     implementation("androidx.hilt:hilt-navigation-compose:1.4.0")
 
     // 7. Video Player
