@@ -45,6 +45,7 @@ import coil.request.CachePolicy
 import coil.request.ImageRequest
 import coil.size.Scale
 import com.hereliesaz.illumera.ui.theme.LocalRoundCorners
+import com.hereliesaz.illumera.ui.util.touchClick
 
 /**
  * ============================================================================
@@ -91,6 +92,7 @@ fun LumeraLandscapeCard(
             onClick = onClick,
             modifier = Modifier
                 .fillMaxSize()
+                .touchClick(onClick = onClick)
                 .onFocusChanged {
                     isFocused = it.isFocused
                     if (it.isFocused) onFocused?.invoke()
