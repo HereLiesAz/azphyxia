@@ -1,0 +1,152 @@
+name: Temporary touch and playback patch
+
+on:
+  push:
+    branches:
+      - fix/touch-and-playback-crash
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[autopatch]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: fix/touch-and-playback-crash
+          fetch-depth: 0
+
+      - name: Apply mechanical source patches
+        shell: python
+        run: |
+          from pathlib import Path
+
+          replacements = {
+              "app/src/main/java/com/hereliesaz/illumera/ui/navigation/NavDrawer.kt": [
+                  (
+                      "import androidx.tv.material3.Surface",
+                      "import com.hereliesaz.illumera.ui.util.TouchSurface as Surface",
+                  ),
+              ],
+              "app/src/main/java/com/hereliesaz/illumera/ui/navigation/TopNavigationBar.kt": [
+                  (
+                      "import androidx.tv.material3.Surface",
+                      "import com.hereliesaz.illumera.ui.util.TouchSurface as Surface",
+                  ),
+              ],
+              "app/src/main/java/com/hereliesaz/illumera/ui/search/SearchScreen.kt": [
+                  (
+                      "import androidx.tv.material3.Surface",
+                      "import com.hereliesaz.illumera.ui.util.TouchSurface as Surface",
+                  ),
+              ],
+              "app/src/main/java/com/hereliesaz/illumera/ui/player/base/BasePlayerScaffold.kt": [
+                  (
+                      "import androidx.tv.material3.IconButton",
+                      "import com.hereliesaz.illumera.ui.util.TouchIconButton as IconButton",
+                  ),
+              ],
+              "app/src/main/java/com/hereliesaz/illumera/ui/details/GlassSidebar.kt": [
+                  ("import androidx.compose.foundation.gestures.detectTapGestures\n", ""),
+                  ("import androidx.compose.ui.input.pointer.pointerInput\n", ""),
+                  ("                    .pointerInput(Unit) { detectTapGestures { } }\n", ""),
+              ],
+          }
+
+          for filename, edits in replacements.items():
+              path = Path(filename)
+              text = path.read_text()
+              for old, new in edits:
+                  if old not in text:
+                      raise SystemExit(f"Expected text not found in {filename}: {old!r}")
+                  text = text.replace(old, new, 1)
+              path.write_text(text)
+
+          exo = Path("app/src/main/java/com/hereliesaz/illumera/ui/player/base/ExoPlayerBackend.kt")
+          text = exo.read_text()
+
+          warmup_old = '''    fun warmup() {
+        if (released) return
+        isTorrentStream = true
+        scope.launch {
+            withContext(Dispatchers.IO) { getOrCreateOkHttpClient(isLocalhost = true) }
+            ensurePlayer()
+        }
+    }
+'''
+          warmup_new = '''    fun warmup() {
+        if (released) return
+        isTorrentStream = true
+        scope.launch {
+            try {
+                withContext(Dispatchers.IO) { getOrCreateOkHttpClient(isLocalhost = true) }
+                ensurePlayer()
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                handlePlayerSetupFailure(error)
+            }
+        }
+    }
+'''
+          if warmup_old not in text:
+              raise SystemExit("warmup block not found")
+          text = text.replace(warmup_old, warmup_new, 1)
+
+          prepare_start_old = '''        scope.launch {
+            val playerPreWarmed = exoPlayer != null
+'''
+          prepare_start_new = '''        scope.launch {
+            try {
+                val playerPreWarmed = exoPlayer != null
+'''
+          if prepare_start_old not in text:
+              raise SystemExit("prepareSource coroutine start not found")
+          text = text.replace(prepare_start_old, prepare_start_new, 1)
+
+          prepare_end_old = '''            player.prepare()
+            updateProgressLoopState()
+        }
+    }
+
+    private fun ensurePlayer(): ExoPlayer {
+'''
+          prepare_end_new = '''            player.prepare()
+            updateProgressLoopState()
+            } catch (error: kotlinx.coroutines.CancellationException) {
+                throw error
+            } catch (error: Exception) {
+                handlePlayerSetupFailure(error)
+            }
+        }
+    }
+
+    private fun handlePlayerSetupFailure(error: Exception) {
+        android.util.Log.e("ExoPlayerBackend", "Player setup failed", error)
+        _uiState.update {
+            it.copy(
+                isBuffering = false,
+                isReady = false,
+                errorMessage = error.message?.takeIf { message -> message.isNotBlank() }
+                    ?: error.javaClass.simpleName
+                    ?: "Player setup failed"
+            )
+        }
+    }
+
+    private fun ensurePlayer(): ExoPlayer {
+'''
+          if prepare_end_old not in text:
+              raise SystemExit("prepareSource coroutine end not found")
+          text = text.replace(prepare_end_old, prepare_end_new, 1)
+          exo.write_text(text)
+
+      - name: Commit source patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add app/src/main/java
+          git commit -m "Fix touch input and contain player setup crashes [autopatch]"
+          git push origin HEAD:fix/touch-and-playback-crash
