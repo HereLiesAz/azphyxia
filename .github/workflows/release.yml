@@ -34,7 +34,7 @@ jobs:
     env:
       HAS_RELEASE_KEYSTORE: ${{ secrets.KEYSTORE_RAW != '' }}
       STREMIO_MEDIA_REF: 95781597c8e3c30d6232e77bdadecc38ad35aa17
-      STREMIO_AAR_CACHE_VERSION: v1
+      STREMIO_AAR_CACHE_VERSION: v2
     steps:
       - name: Checkout illumera
         uses: actions/checkout@v4

@@ -23,7 +23,10 @@ if [[ -z "$SDKMANAGER" || ! -x "$SDKMANAGER" ]]; then
     exit 1
 fi
 
-NDK_VERSION="29.0.14206865"
+# Stremio/media at STREMIO_MEDIA_REF declares this NDK through its Android
+# configuration. Keep the helper scripts and Gradle on the exact same version;
+# forcing a newer ndk.dir makes AGP fail with CXX1104 before any module builds.
+NDK_VERSION="27.0.12077973"
 CMAKE_VERSION="3.22.1"
 
 echo "Installing native Android toolchain..."
