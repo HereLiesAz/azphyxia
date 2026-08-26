@@ -34,6 +34,7 @@ import androidx.tv.material3.MaterialTheme
 import androidx.tv.material3.Surface
 import androidx.tv.material3.Text
 import com.hereliesaz.illumera.ui.theme.LocalRoundCorners
+import com.hereliesaz.illumera.ui.util.touchClick
 
 @OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
@@ -61,6 +62,7 @@ fun ViewMoreCard(
             onClick = onClick,
             modifier = Modifier
                 .fillMaxSize()
+                .touchClick(onClick = onClick)
                 .onFocusChanged {
                     isFocused = it.isFocused
                     if (it.isFocused) onFocused?.invoke()

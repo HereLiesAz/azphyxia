@@ -18,9 +18,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-
 import androidx.compose.ui.focus.onFocusChanged
-
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.graphicsLayer
@@ -45,6 +43,7 @@ import coil.size.Scale
 import com.hereliesaz.illumera.domain.HubItem
 import com.hereliesaz.illumera.domain.HubShape
 import com.hereliesaz.illumera.ui.theme.LocalHubRoundCorners
+import com.hereliesaz.illumera.ui.util.touchClick
 
 /**
  * ============================================================================
@@ -87,8 +86,6 @@ fun HubCard(
     val cardShape = if (roundCorners) RoundedCornerShape(12.dp) else RectangleShape
     val focusedCardShape = if (roundCorners) RoundedCornerShape(16.dp) else RectangleShape
     
-
-
     Box(
         modifier = modifier
             .width(cardWidth)
@@ -100,6 +97,7 @@ fun HubCard(
             onClick = onClick,
             modifier = Modifier
                 .fillMaxSize()
+                .touchClick(onClick = onClick)
                 .onFocusChanged {
                     isFocused = it.isFocused
                     if (it.isFocused) onFocused?.invoke()
