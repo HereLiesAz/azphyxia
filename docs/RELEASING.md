@@ -103,11 +103,26 @@ To move to a newer Media3 base:
 2. Update `STREMIO_MEDIA_REF` to a `Stremio/media` commit built against a
    compatible (ideally identical) Media3 version, and bump
    `STREMIO_AAR_CACHE_VERSION`.
-3. Push to a branch and watch the "Build and Release APK" workflow run
+3. Check `assrender/`'s `Renderer` subclasses (`AssSubtitleRenderer.kt`,
+   `AssTextRenderer.kt`) against the new Media3 version's
+   `androidx.media3.exoplayer.BaseRenderer`/`Renderer` method signatures —
+   `onEnabled`, `onStreamChanged`, `onPositionReset`, `onDisabled`, `render`,
+   `isReady`, `isEnded`. These have changed across Media3 versions before
+   (`onPositionReset` gained a third `sampleStreamIsResetToKeyFrame`
+   parameter between 1.4.1 and 1.10.1) and the compiler will only catch it
+   if the signature actually changed shape rather than just semantics —
+   don't rely on it silently. The actual current signatures for any Media3
+   version are in that version's `-sources.jar`, downloadable from Google's
+   Maven repo, e.g.
+   `https://dl.google.com/android/maven2/androidx/media3/media3-exoplayer/<version>/media3-exoplayer-<version>-sources.jar`
+   (not Maven Central — androidx.media3 core artifacts aren't published
+   there).
+4. Push to a branch and watch the "Build and Release APK" workflow run
    through to a successful, published release — a green build is the only
    real confirmation the pairing is compatible; there's no offline check
-   for this. If it fails, read the actual Gradle error in the failed job's
-   logs rather than assuming it's the version pairing — the two failures
-   this pipeline has actually hit in practice were CI/toolchain issues
-   (wrong NDK version, wrong output-directory assumption), not Media3
-   incompatibility.
+   for the `playbackcore/` AAR side of this. If it fails, read the actual
+   Gradle error in the failed job's logs rather than assuming it's the
+   version pairing — of the failures this pipeline has actually hit in
+   practice, two were CI/toolchain issues (wrong NDK version, wrong
+   output-directory assumption) and one was exactly the `assrender`
+   signature drift described in step 3.

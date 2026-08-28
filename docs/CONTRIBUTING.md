@@ -3,11 +3,15 @@
 ## Getting set up
 
 See the main [`README.md`](../README.md#building) for the build
-prerequisites and the required `assrender` sibling checkout. Read
-[`RELEASING.md`](RELEASING.md) before touching anything under
-`playbackcore/`, `ci/build-stremio-media.sh`, or `.github/workflows/release.yml`
-— the video playback stack is the most fragile part of this project, and a
-version mismatch there fails silently until someone hits play.
+prerequisites. Read [`RELEASING.md`](RELEASING.md) before touching anything
+under `playbackcore/`, `assrender/`, `ci/build-stremio-media.sh`, or
+`.github/workflows/release.yml` — the video playback stack is the most
+fragile part of this project. A Media3 version mismatch between
+`playbackcore/`'s custom ExoPlayer AAR and the declared `media3` version
+fails silently at runtime until someone hits play; a Media3 version bump
+that `assrender/`'s vendored `Renderer` overrides haven't caught up to
+fails loudly at compile time instead (still worth checking for before you
+push, not after CI tells you).
 
 ## Code style
 

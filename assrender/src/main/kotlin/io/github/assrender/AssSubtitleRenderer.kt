@@ -113,8 +113,12 @@ class AssSubtitleRenderer(
 
     override fun isEnded(): Boolean = false
 
-    override fun onPositionReset(positionUs: Long, joining: Boolean) {
-        super.onPositionReset(positionUs, joining)
+    override fun onPositionReset(
+        positionUs: Long,
+        joining: Boolean,
+        sampleStreamIsResetToKeyFrame: Boolean
+    ) {
+        super.onPositionReset(positionUs, joining, sampleStreamIsResetToKeyFrame)
         if (nativeHandle != 0L) {
             NativeBridge.nativeSeek(nativeHandle, positionUs / 1000)
         }

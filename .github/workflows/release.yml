@@ -42,14 +42,6 @@ jobs:
           path: illumera
           fetch-depth: 0
 
-      # settings.gradle.kts expects the assrender module as a sibling directory:
-      # project(":assrender").projectDir = file("../assrender/assrender")
-      - name: Checkout assrender (sibling module dependency)
-        uses: actions/checkout@v4
-        with:
-          repository: LumeraD3v/assrender
-          path: assrender
-
       - name: Restore Stremio playback AAR cache
         id: stremio-cache
         uses: actions/cache@v4
