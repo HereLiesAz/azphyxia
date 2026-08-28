@@ -2,12 +2,12 @@ package com.hereliesaz.illumera.data.model
 
 import androidx.compose.runtime.Immutable
 import androidx.room.Entity
-import androidx.room.PrimaryKey
 
 @Immutable
-@Entity(tableName = "watchlist")
+@Entity(tableName = "watchlist", primaryKeys = ["profileId", "id"])
 data class WatchlistEntity(
-    @PrimaryKey val id: String,       // IMDb or addon ID (e.g., "tt0111161")
+    val profileId: Int,
+    val id: String,                   // IMDb or addon ID (e.g., "tt0111161")
     val type: String,                 // "movie" or "series"
     val title: String,
     val poster: String?,

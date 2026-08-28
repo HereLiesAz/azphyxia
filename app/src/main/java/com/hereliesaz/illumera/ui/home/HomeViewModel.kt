@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hereliesaz.illumera.data.local.AddonDao
 import com.hereliesaz.illumera.data.model.WatchHistoryEntity
+import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
 import com.hereliesaz.illumera.data.repository.AddonRepository
 import com.hereliesaz.illumera.data.tmdb.TmdbMetadataService
 import com.hereliesaz.illumera.data.tmdb.TmdbService
@@ -34,8 +35,12 @@ class HomeViewModel @Inject constructor(
     private val dao: AddonDao,
     @ApplicationContext private val context: Context,
     private val tmdbService: TmdbService,
-    private val tmdbMetadataService: TmdbMetadataService
+    private val tmdbMetadataService: TmdbMetadataService,
+    private val profileConfigurationManager: ProfileConfigurationManager
 ) : ViewModel() {
+
+    private val profileId: Int
+        get() = profileConfigurationManager.getLastActiveProfileId() ?: 1
 
     private var loadJob: kotlinx.coroutines.Job? = null
     private var lastFocusedKeyMemory: String? = null
@@ -311,7 +316,7 @@ class HomeViewModel @Inject constructor(
                     }
                     // Also update series next-up poster if missing
                     if (!fallback.poster.isNullOrBlank()) {
-                        val nextUp = dao.getSeriesNextUp(item.id)
+                        val nextUp = dao.getSeriesNextUp(profileId, item.id)
                         if (nextUp != null && nextUp.poster.isNullOrBlank()) {
                             dao.upsertSeriesNextUp(nextUp.copy(poster = fallback.poster))
                         }
@@ -594,7 +599,7 @@ class HomeViewModel @Inject constructor(
                     }
                 }
                 launch {
-                    dao.getActiveSeriesNextUp().collect { nextUp ->
+                    dao.getActiveSeriesNextUp(profileId).collect { nextUp ->
                         _state.update { it.copy(seriesNextUp = nextUp) }
                     }
                 }

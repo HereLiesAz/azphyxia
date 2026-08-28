@@ -155,6 +155,12 @@ interface AddonDao {
     @Query("DELETE FROM hub_row_items")
     suspend fun clearHubRowItems()
 
+    // configUniqueId is "<transportUrl>/<type>/<id>" (see CatalogConfigEntity.uniqueId) —
+    // deleting an addon must also drop any custom Hub row tile built from one of its
+    // catalogs, or the tile is left permanently dead with nothing to render.
+    @Query("DELETE FROM hub_row_items WHERE configUniqueId LIKE :transportUrl || '/%'")
+    suspend fun deleteHubRowItemsForAddon(transportUrl: String)
+
     @Query("DELETE FROM hub_rows")
     suspend fun clearHubRows()
 
@@ -207,17 +213,17 @@ interface AddonDao {
 
     // ── Watchlist ──
 
-    @Query("SELECT * FROM watchlist ORDER BY addedAt DESC")
-    fun getWatchlist(): Flow<List<WatchlistEntity>>
+    @Query("SELECT * FROM watchlist WHERE profileId = :profileId ORDER BY addedAt DESC")
+    fun getWatchlist(profileId: Int): Flow<List<WatchlistEntity>>
 
-    @Query("SELECT * FROM watchlist WHERE type = :type ORDER BY addedAt DESC")
-    fun getWatchlistByType(type: String): Flow<List<WatchlistEntity>>
+    @Query("SELECT * FROM watchlist WHERE profileId = :profileId AND type = :type ORDER BY addedAt DESC")
+    fun getWatchlistByType(profileId: Int, type: String): Flow<List<WatchlistEntity>>
 
-    @Query("SELECT * FROM watchlist ORDER BY addedAt DESC")
-    suspend fun getWatchlistOnce(): List<WatchlistEntity>
+    @Query("SELECT * FROM watchlist WHERE profileId = :profileId ORDER BY addedAt DESC")
+    suspend fun getWatchlistOnce(profileId: Int): List<WatchlistEntity>
 
-    @Query("SELECT * FROM watchlist WHERE id = :id")
-    suspend fun getWatchlistItem(id: String): WatchlistEntity?
+    @Query("SELECT * FROM watchlist WHERE profileId = :profileId AND id = :id")
+    suspend fun getWatchlistItem(profileId: Int, id: String): WatchlistEntity?
 
     @Query("SELECT * FROM watch_history WHERE scrobbled = 1 AND watched = 0")
     suspend fun getScrobbledInProgressItems(): List<WatchHistoryEntity>
@@ -236,26 +242,26 @@ interface AddonDao {
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertSeriesNextUp(entry: SeriesNextUpEntity)
 
-    @Query("SELECT * FROM series_next_up WHERE isComplete = 0 ORDER BY updatedAt DESC")
-    fun getActiveSeriesNextUp(): Flow<List<SeriesNextUpEntity>>
+    @Query("SELECT * FROM series_next_up WHERE profileId = :profileId AND isComplete = 0 ORDER BY updatedAt DESC")
+    fun getActiveSeriesNextUp(profileId: Int): Flow<List<SeriesNextUpEntity>>
 
-    @Query("SELECT * FROM series_next_up WHERE seriesId = :seriesId")
-    suspend fun getSeriesNextUp(seriesId: String): SeriesNextUpEntity?
+    @Query("SELECT * FROM series_next_up WHERE profileId = :profileId AND seriesId = :seriesId")
+    suspend fun getSeriesNextUp(profileId: Int, seriesId: String): SeriesNextUpEntity?
 
-    @Query("DELETE FROM series_next_up WHERE seriesId = :seriesId")
-    suspend fun deleteSeriesNextUp(seriesId: String)
+    @Query("DELETE FROM series_next_up WHERE profileId = :profileId AND seriesId = :seriesId")
+    suspend fun deleteSeriesNextUp(profileId: Int, seriesId: String)
 
-    @Query("SELECT EXISTS(SELECT 1 FROM watchlist WHERE id = :id)")
-    suspend fun isInWatchlist(id: String): Boolean
+    @Query("SELECT EXISTS(SELECT 1 FROM watchlist WHERE profileId = :profileId AND id = :id)")
+    suspend fun isInWatchlist(profileId: Int, id: String): Boolean
 
-    @Query("SELECT EXISTS(SELECT 1 FROM watchlist WHERE id = :id)")
-    fun isInWatchlistFlow(id: String): Flow<Boolean>
+    @Query("SELECT EXISTS(SELECT 1 FROM watchlist WHERE profileId = :profileId AND id = :id)")
+    fun isInWatchlistFlow(profileId: Int, id: String): Flow<Boolean>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun addToWatchlist(item: WatchlistEntity)
 
-    @Query("DELETE FROM watchlist WHERE id = :id")
-    suspend fun removeFromWatchlist(id: String)
+    @Query("DELETE FROM watchlist WHERE profileId = :profileId AND id = :id")
+    suspend fun removeFromWatchlist(profileId: Int, id: String)
 
     @Transaction
     suspend fun replaceRuntimeState(

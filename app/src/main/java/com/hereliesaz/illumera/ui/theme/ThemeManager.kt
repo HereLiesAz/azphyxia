@@ -88,12 +88,17 @@ class ThemeManager @Inject constructor(
     }
 
     /**
-     * Create a new custom theme
+     * Create a new custom theme. If [selectForProfileId] is given, the new theme is
+     * assigned to that profile in the same coroutine as the insert — calling
+     * selectTheme() separately right after this returns races the insert (both are
+     * independently dispatched to Dispatchers.IO with no ordering guarantee), and a
+     * loss makes selectTheme() find no row yet and silently fall back to Void.
      */
     fun createCustomTheme(
         name: String,
         primaryColor: Long,
-        backgroundColor: Long
+        backgroundColor: Long,
+        selectForProfileId: Int? = null
     ): String {
         val id = "custom_${UUID.randomUUID().toString().take(8)}"
         val theme = ThemeEntity(
@@ -110,6 +115,14 @@ class ThemeManager @Inject constructor(
         )
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             dao.insertTheme(theme)
+            if (selectForProfileId != null) {
+                dao.insertProfile(
+                    (dao.getProfileById(selectForProfileId) ?: return@launch).copy(themeId = id)
+                )
+                if (_currentProfileId.value == selectForProfileId) {
+                    _currentTheme.value = theme
+                }
+            }
         }
         return id
     }

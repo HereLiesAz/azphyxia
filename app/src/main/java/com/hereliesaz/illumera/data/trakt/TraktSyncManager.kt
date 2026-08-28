@@ -5,6 +5,7 @@ import com.hereliesaz.illumera.data.local.AddonDao
 import com.hereliesaz.illumera.data.model.SeriesNextUpEntity
 import com.hereliesaz.illumera.data.model.WatchHistoryEntity
 import com.hereliesaz.illumera.data.model.WatchlistEntity
+import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
 import com.hereliesaz.illumera.data.model.trakt.TraktIds
 import com.hereliesaz.illumera.data.model.trakt.TraktPlaybackItem
 import com.hereliesaz.illumera.data.model.trakt.TraktSyncEpisode
@@ -25,11 +26,15 @@ import javax.inject.Singleton
 class TraktSyncManager @Inject constructor(
     private val traktSyncApi: TraktSyncApiService,
     private val traktAuthManager: TraktAuthManager,
-    private val dao: AddonDao
+    private val dao: AddonDao,
+    private val profileConfigurationManager: ProfileConfigurationManager
 ) {
     companion object {
         private const val TAG = "TraktSyncManager"
     }
+
+    private val profileId: Int
+        get() = profileConfigurationManager.getLastActiveProfileId() ?: 1
 
     private val syncMutex = Mutex()
 
@@ -109,7 +114,7 @@ class TraktSyncManager @Inject constructor(
             syncMutex.withLock {
                 withContext(Dispatchers.IO) {
                     try {
-                        val localItems = dao.getWatchlistOnce()
+                        val localItems = dao.getWatchlistOnce(profileId)
                         if (localItems.isNotEmpty()) {
                             pushToTrakt(localItems)
                             Log.d(TAG, "Initial push: ${localItems.size} items")
@@ -140,7 +145,7 @@ class TraktSyncManager @Inject constructor(
                     ?: return@withContext Result.failure(Exception("Failed to fetch Trakt watchlist"))
 
                 // 2. Get local watchlist
-                val localItems = dao.getWatchlistOnce()
+                val localItems = dao.getWatchlistOnce(profileId)
 
                 // 3. Build lookup sets
                 val traktImdbIds = traktItems.mapNotNull { item ->
@@ -174,7 +179,7 @@ class TraktSyncManager @Inject constructor(
                 // can't be matched against Trakt's response. (Fix: audit #7)
                 val toRemove = localItems.filter { it.id.startsWith("tt") && it.id !in traktImdbIds }
                 for (item in toRemove) {
-                    dao.removeFromWatchlist(item.id)
+                    dao.removeFromWatchlist(profileId, item.id)
                     Log.d(TAG, "Removed ${item.title} (deleted on Trakt)")
                 }
 
@@ -535,7 +540,7 @@ class TraktSyncManager @Inject constructor(
                         val progress = progressResponse.body() ?: continue
 
                         val nextEp = progress.nextEpisode
-                        val existing = dao.getSeriesNextUp(imdbId)
+                        val existing = dao.getSeriesNextUp(profileId, imdbId)
                         if (nextEp != null) {
                             val airDate = nextEp.firstAired?.take(10)
                             val unchanged = existing != null &&
@@ -551,6 +556,7 @@ class TraktSyncManager @Inject constructor(
 
                             dao.upsertSeriesNextUp(
                                 SeriesNextUpEntity(
+                                    profileId = profileId,
                                     seriesId = imdbId,
                                     title = show.show.title ?: "Unknown",
                                     poster = existing?.poster,
@@ -798,6 +804,7 @@ class TraktSyncManager @Inject constructor(
 
             dao.addToWatchlist(
                 WatchlistEntity(
+                    profileId = profileId,
                     id = id,
                     type = type,
                     title = title,

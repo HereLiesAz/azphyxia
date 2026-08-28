@@ -149,6 +149,58 @@ private val MIGRATION_42_43 = object : Migration(42, 43) {
     }
 }
 
+// watchlist and series_next_up were previously global tables shared by every
+// profile on the device — bookmarking a title or tracking a show's next episode
+// on one profile made it visible on all of them. Rebuild both with a profileId
+// column folded into the primary key so profiles are isolated. Existing rows
+// default to profileId = 1 (the device's first/only profile in the common case);
+// SQLite's ALTER TABLE can't add a column into an existing PRIMARY KEY, so this
+// recreates each table rather than a plain ADD COLUMN.
+private val MIGRATION_43_44 = object : Migration(43, 44) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        db.execSQL(
+            "CREATE TABLE watchlist_new (" +
+                "profileId INTEGER NOT NULL, " +
+                "id TEXT NOT NULL, " +
+                "type TEXT NOT NULL, " +
+                "title TEXT NOT NULL, " +
+                "poster TEXT, " +
+                "addedAt INTEGER NOT NULL, " +
+                "PRIMARY KEY(profileId, id))"
+        )
+        db.execSQL(
+            "INSERT INTO watchlist_new (profileId, id, type, title, poster, addedAt) " +
+                "SELECT 1, id, type, title, poster, addedAt FROM watchlist"
+        )
+        db.execSQL("DROP TABLE watchlist")
+        db.execSQL("ALTER TABLE watchlist_new RENAME TO watchlist")
+
+        db.execSQL(
+            "CREATE TABLE series_next_up_new (" +
+                "profileId INTEGER NOT NULL, " +
+                "seriesId TEXT NOT NULL, " +
+                "title TEXT NOT NULL, " +
+                "poster TEXT, " +
+                "nextSeason INTEGER NOT NULL, " +
+                "nextEpisode INTEGER NOT NULL, " +
+                "nextEpisodeTitle TEXT, " +
+                "nextReleased TEXT, " +
+                "isComplete INTEGER NOT NULL DEFAULT 0, " +
+                "isNewEpisode INTEGER NOT NULL DEFAULT 0, " +
+                "updatedAt INTEGER NOT NULL, " +
+                "PRIMARY KEY(profileId, seriesId))"
+        )
+        db.execSQL(
+            "INSERT INTO series_next_up_new (profileId, seriesId, title, poster, nextSeason, " +
+                "nextEpisode, nextEpisodeTitle, nextReleased, isComplete, isNewEpisode, updatedAt) " +
+                "SELECT 1, seriesId, title, poster, nextSeason, nextEpisode, nextEpisodeTitle, " +
+                "nextReleased, isComplete, isNewEpisode, updatedAt FROM series_next_up"
+        )
+        db.execSQL("DROP TABLE series_next_up")
+        db.execSQL("ALTER TABLE series_next_up_new RENAME TO series_next_up")
+    }
+}
+
 @Module
 @InstallIn(SingletonComponent::class)
 object DatabaseModule {
@@ -168,7 +220,14 @@ object DatabaseModule {
                     db.execSQL("PRAGMA synchronous = 2")
                 }
             })
-            .addMigrations(MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37, MIGRATION_37_38, MIGRATION_38_39, MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43)
+            .addMigrations(MIGRATION_26_27, MIGRATION_27_28, MIGRATION_28_29, MIGRATION_29_30, MIGRATION_30_31, MIGRATION_31_32, MIGRATION_32_33, MIGRATION_33_34, MIGRATION_34_35, MIGRATION_35_36, MIGRATION_36_37, MIGRATION_37_38, MIGRATION_38_39, MIGRATION_39_40, MIGRATION_40_41, MIGRATION_41_42, MIGRATION_42_43, MIGRATION_43_44)
+            // No explicit migrations exist below version 26 (an early, narrowly
+            // distributed schema). Without this, any device still on one of those
+            // versions hits Room's "no migration found" IllegalStateException and
+            // can't open the database at all. Scoped to those specific starting
+            // versions only — an actually-missing migration between two *current*
+            // versions still fails loudly instead of silently wiping data.
+            .fallbackToDestructiveMigrationFrom(*(1..25).toList().toIntArray())
             .build()
     }
 
