@@ -104,7 +104,11 @@ copy_release_aar() {
     local module_path="$1"
     local output_name="$2"
     local aar
-    aar="$(find "$STREMIO_DIR/$module_path/build/outputs/aar" -maxdepth 1 -type f -name '*-release.aar' | head -1)"
+    # Stremio/media's root gradle.properties sets `buildDir=buildout`, which
+    # Gradle applies as a project property to every subproject, relocating
+    # each module's output directory from the default <module>/build to
+    # <module>/buildout. Check both so this keeps working if that ever changes.
+    aar="$(find "$STREMIO_DIR/$module_path/buildout/outputs/aar" "$STREMIO_DIR/$module_path/build/outputs/aar" -maxdepth 1 -type f -name '*-release.aar' 2>/dev/null | head -1)"
     if [[ -z "$aar" || ! -s "$aar" ]]; then
         echo "No release AAR produced for $module_path" >&2
         exit 1
