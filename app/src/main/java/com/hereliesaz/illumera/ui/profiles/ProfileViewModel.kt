@@ -188,6 +188,8 @@ class ProfileViewModel @Inject constructor(
     fun deleteProfile(id: Int) {
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             dao.deleteProfile(id)
+            dao.deleteWatchlistForProfile(id)
+            dao.deleteSeriesNextUpForProfile(id)
             profileConfigurationManager.deleteProfileState(id)
             debridManager.clearForProfile(id)
             traktAuthManager.clearTokensForProfile(id)
