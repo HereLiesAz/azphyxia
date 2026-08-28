@@ -1446,9 +1446,13 @@ class MainActivity : ComponentActivity() {
                             // gridViewItems isn't rememberSaveable (MetaItem isn't Parcelable), so a
                             // process-death recreation restores gridViewConfigId/gridViewTitle but
                             // loses the items themselves, leaving a header with nothing under it.
-                            // Bounce back to Home rather than show that broken empty screen.
+                            // Bounce back to Home rather than show that broken empty screen. Key off
+                            // the title rather than configId — Search's "View More" callback always
+                            // passes an empty configId (there's no catalog to page through), so
+                            // configId alone can't tell a legitimately-empty Search grid from a
+                            // restored one; title is set at every call site regardless of source.
                             LaunchedEffect(Unit) {
-                                if (gridViewConfigId.isNotEmpty() && gridViewItems.isEmpty()) {
+                                if (gridViewTitle.isNotEmpty() && gridViewItems.isEmpty()) {
                                     activeView = "menu"
                                 }
                             }
@@ -1709,15 +1713,20 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         if (view == "player") {
-                            if (selectedVideoUrl.isNotBlank() && playerState.currentStream == null) {
+                            if (selectedVideoUrl.isNotBlank() && playerState.currentStream == null &&
+                                !selectedPlaybackId.startsWith("trailer_")
+                            ) {
                                 // playerState (subtitles, alternate sources, episode list, current
                                 // stream) is a plain `remember`, so it resets to empty on Activity
                                 // recreation even though selectedVideoUrl survives via
                                 // rememberSaveable and would otherwise resume a degraded, silently
-                                // broken player session. Every legitimate playback start sets
-                                // currentStream alongside selectedVideoUrl, so seeing one without
-                                // the other only happens after this kind of recreation — send the
-                                // user back to Details to re-resolve properly instead.
+                                // broken player session. Every legitimate NON-TRAILER playback start
+                                // sets currentStream alongside selectedVideoUrl, so seeing one
+                                // without the other only happens after this kind of recreation for
+                                // normal playback — send the user back to Details to re-resolve.
+                                // Trailers are exempt: onTrailerClick never sets currentStream (it
+                                // has no Stream object, just a resolved YouTube URL), so this guard
+                                // would otherwise fire on every legitimate trailer play.
                                 LaunchedEffect(Unit) {
                                     activeView = "details"
                                 }
