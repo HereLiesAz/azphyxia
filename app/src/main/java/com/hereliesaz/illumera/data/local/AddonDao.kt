@@ -82,6 +82,17 @@ interface AddonDao {
     @Query("DELETE FROM series_next_up WHERE profileId = :profileId")
     suspend fun deleteSeriesNextUpForProfile(profileId: Int)
 
+    // A plain sequence of suspend calls has no atomicity of its own — a process death or a
+    // later call failing partway through would leave a profile gone but its watchlist/next-up
+    // rows orphaned, with no UI path left to retry cleanup. @Transaction runs all three deletes
+    // as one unit so that can't happen.
+    @Transaction
+    suspend fun deleteProfileCascading(id: Int) {
+        deleteProfile(id)
+        deleteWatchlistForProfile(id)
+        deleteSeriesNextUpForProfile(id)
+    }
+
     @Query("SELECT * FROM watch_history ORDER BY lastWatched DESC")
     fun getWatchHistory(): Flow<List<WatchHistoryEntity>>
 
