@@ -2,12 +2,12 @@ package com.hereliesaz.illumera.data.model
 
 import androidx.compose.runtime.Immutable
 import androidx.room.Entity
-import androidx.room.PrimaryKey
 
 @Immutable
-@Entity(tableName = "series_next_up")
+@Entity(tableName = "series_next_up", primaryKeys = ["profileId", "seriesId"])
 data class SeriesNextUpEntity(
-    @PrimaryKey val seriesId: String,   // IMDb ID (e.g., "tt1190634")
+    val profileId: Int,
+    val seriesId: String,               // IMDb ID (e.g., "tt1190634")
     val title: String,                  // Show name
     val poster: String?,
     val nextSeason: Int,

@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hereliesaz.illumera.data.local.AddonDao
 import com.hereliesaz.illumera.data.model.WatchHistoryEntity
+import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
 import com.hereliesaz.illumera.data.trakt.TraktScrobbleManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
@@ -12,12 +13,13 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 
-private const val WATCHED_THRESHOLD = 0.90 // 90% — above Trakt's 80% minimum
+private const val DEFAULT_WATCHED_THRESHOLD = 0.85 // matches ProfileEntity.watchedThreshold's default
 
 @HiltViewModel
 class PlayerViewModel @Inject constructor(
     private val dao: AddonDao,
-    private val traktScrobbleManager: TraktScrobbleManager
+    private val traktScrobbleManager: TraktScrobbleManager,
+    private val profileConfigurationManager: ProfileConfigurationManager
 ) : ViewModel() {
 
     fun saveProgress(
@@ -40,7 +42,11 @@ class PlayerViewModel @Inject constructor(
             val remaining = safeDuration - safePosition
             val completionRatio = if (safeDuration > 0L) safePosition.toDouble() / safeDuration.toDouble() else 0.0
 
-            val isCompleted = completionRatio >= WATCHED_THRESHOLD || remaining <= 30_000L
+            val profileId = profileConfigurationManager.getLastActiveProfileId()
+            val watchedThreshold = profileId?.let { dao.getProfileById(it)?.watchedThreshold }
+                ?.let { it / 100.0 } ?: DEFAULT_WATCHED_THRESHOLD
+
+            val isCompleted = completionRatio >= watchedThreshold || remaining <= 30_000L
 
             val entry = WatchHistoryEntity(
                 id = id,

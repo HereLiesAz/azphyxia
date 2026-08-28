@@ -58,7 +58,6 @@ import com.hereliesaz.illumera.ui.addons.VoidButton
 import com.hereliesaz.illumera.ui.addons.VoidInput
 import com.hereliesaz.illumera.ui.components.CenterCarouselRow
 import com.hereliesaz.illumera.ui.home.DpadRepeatGate
-import com.hereliesaz.illumera.ui.theme.DefaultThemes
 import com.hereliesaz.illumera.ui.theme.LumeraTheme
 import com.hereliesaz.illumera.ui.theme.ThemeManager
 import kotlinx.coroutines.delay
@@ -975,7 +974,10 @@ private fun UploadAvatarButton(
 @Composable
 fun WizardThemeStep(onFinish: (String) -> Unit, onBack: () -> Unit) {
     val themeManager: ThemeManager = hiltViewModel()
-    val themes = DefaultThemes.ALL
+    // Built-in + custom themes, not just DefaultThemes.ALL — otherwise a theme
+    // the user created via the theme editor is unreachable from this wizard.
+    val themes by themeManager.availableThemes.collectAsState()
+    if (themes.isEmpty()) return
     val initialIndex = themes.size / 2
     var previewTheme by remember { mutableStateOf(themes[initialIndex]) }
     val listState = rememberLazyListState()

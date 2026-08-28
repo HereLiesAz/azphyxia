@@ -99,8 +99,7 @@ fun ThemeSettings(
                     )
                 } else {
                     // Create new custom theme and assign to profile
-                    val newId = themeManager.createCustomTheme(name, primary, background)
-                    themeManager.selectTheme(currentProfile.id, newId)
+                    themeManager.createCustomTheme(name, primary, background, selectForProfileId = currentProfile.id)
                 }
                 editingTheme = null
                 isCreatingNew = false

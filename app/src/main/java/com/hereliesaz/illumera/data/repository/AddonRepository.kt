@@ -426,6 +426,7 @@ class AddonRepository @Inject constructor(
 
     suspend fun deleteAddon(transportUrl: String) = withContext(Dispatchers.IO) {
         dao.deleteCatalogConfigs(transportUrl)
+        dao.deleteHubRowItemsForAddon(transportUrl)
         dao.deleteAddonByUrl(transportUrl)
     }
 
