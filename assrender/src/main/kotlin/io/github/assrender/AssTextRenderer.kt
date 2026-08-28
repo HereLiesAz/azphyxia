@@ -155,8 +155,12 @@ class AssTextRenderer(
 
     override fun isEnded(): Boolean = false
 
-    override fun onPositionReset(positionUs: Long, joining: Boolean) {
-        super.onPositionReset(positionUs, joining)
+    override fun onPositionReset(
+        positionUs: Long,
+        joining: Boolean,
+        sampleStreamIsResetToKeyFrame: Boolean
+    ) {
+        super.onPositionReset(positionUs, joining, sampleStreamIsResetToKeyFrame)
         // Don't flush events on seek — we want to keep all events in memory
         // so seeking works instantly. libass handles timestamp lookup internally.
         lastRenderedTimeUs = Long.MIN_VALUE
