@@ -6,8 +6,8 @@ import com.hereliesaz.illumera.data.model.debrid.DebridResult
 
 /**
  * Common surface every debrid provider implementation exposes. Implementations live
- * under data/debrid/providers/ and are looked up by [com.hereliesaz.illumera.data.model.debrid.DebridProvider]
- * via [DebridServiceRegistry].
+ * under data/debrid/providers/ and are dispatched by [DebridManager] based on
+ * [com.hereliesaz.illumera.data.model.debrid.DebridProvider].
  */
 interface DebridService {
 

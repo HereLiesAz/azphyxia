@@ -40,18 +40,17 @@ class TraktAuthInterceptor @Inject constructor(
         // If we get a 401, try refreshing the token and retry once
         if (response.code == 401 && token != null) {
             Log.d(TAG, "Got 401, attempting token refresh")
-            response.close()
 
             val newToken = refreshTokenSynchronized(token)
 
-            return if (newToken != null) {
+            if (newToken != null) {
                 Log.d(TAG, "Token refreshed, retrying request")
-                chain.proceed(buildRequest(chain.request(), newToken))
-            } else {
-                Log.w(TAG, "Token refresh failed")
-                // Return a new response since we closed the original
-                chain.proceed(buildRequest(chain.request(), token))
+                response.close()
+                return chain.proceed(buildRequest(chain.request(), newToken))
             }
+            Log.w(TAG, "Token refresh failed")
+            // Refresh didn't produce a usable token — retrying with the same
+            // one would just fail the same way, so return the original 401.
         }
 
         return response

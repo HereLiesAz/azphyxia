@@ -10,9 +10,14 @@ import com.hereliesaz.illumera.data.model.trakt.TraktTokenResponse
 import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
 import com.hereliesaz.illumera.data.remote.TraktApiService
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -56,6 +61,11 @@ class TraktAuthManager @Inject constructor(
 
     private val _authState = MutableStateFlow<DeviceAuthState>(DeviceAuthState.Idle)
     val authState: StateFlow<DeviceAuthState> = _authState
+
+    // Owns the device-auth polling loop so it can be cancelled on retry/dismiss
+    // instead of racing a new attempt against an abandoned one.
+    private val managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var deviceAuthJob: Job? = null
 
     private fun activeProfileId(): Int = profileConfigurationManager.getLastActiveProfileId() ?: 1
 
@@ -109,9 +119,9 @@ class TraktAuthManager @Inject constructor(
         val token = prefs.getString(profileKey(KEY_ACCESS_TOKEN), null) ?: return null
         // Proactive expiry check: flag as needing refresh if within 60 seconds of expiry
         val expiresAt = prefs.getLong(profileKey(KEY_EXPIRES_AT), 0L)
-        if (expiresAt > 0 && System.currentTimeMillis() / 1000 >= expiresAt - 60) {
+        needsRefresh = expiresAt > 0 && System.currentTimeMillis() / 1000 >= expiresAt - 60
+        if (needsRefresh) {
             Log.d(TAG, "Token expired or expiring soon, needs refresh")
-            needsRefresh = true
         }
         return token
     }
@@ -143,35 +153,41 @@ class TraktAuthManager @Inject constructor(
 
     // ── Device Code Auth Flow ──
 
-    suspend fun startDeviceAuth() {
-        _authState.value = DeviceAuthState.Idle
-        if (BuildConfig.TRAKT_CLIENT_ID.isBlank()) {
-            _authState.value = DeviceAuthState.Error(
-                "Trakt is not configured for this build (missing client ID)"
-            )
-            return
-        }
-        try {
-            val response = traktApi.getDeviceCode(
-                mapOf("client_id" to BuildConfig.TRAKT_CLIENT_ID)
-            )
-            val body = response.body()
-            if (!response.isSuccessful || body == null) {
+    fun startDeviceAuth() {
+        // Cancel any still-running poll from a previous attempt (e.g. the user
+        // dismissed the dialog and tapped Connect again) so it can't complete
+        // later and silently overwrite this attempt's result.
+        deviceAuthJob?.cancel()
+        deviceAuthJob = managerScope.launch {
+            _authState.value = DeviceAuthState.Idle
+            if (BuildConfig.TRAKT_CLIENT_ID.isBlank()) {
                 _authState.value = DeviceAuthState.Error(
-                    "Failed to get device code (HTTP ${response.code()})"
+                    "Trakt is not configured for this build (missing client ID)"
                 )
-                return
+                return@launch
             }
+            try {
+                val response = traktApi.getDeviceCode(
+                    mapOf("client_id" to BuildConfig.TRAKT_CLIENT_ID)
+                )
+                val body = response.body()
+                if (!response.isSuccessful || body == null) {
+                    _authState.value = DeviceAuthState.Error(
+                        "Failed to get device code (HTTP ${response.code()})"
+                    )
+                    return@launch
+                }
 
-            _authState.value = DeviceAuthState.WaitingForUser(
-                userCode = body.userCode,
-                verificationUrl = body.verificationUrl
-            )
+                _authState.value = DeviceAuthState.WaitingForUser(
+                    userCode = body.userCode,
+                    verificationUrl = body.verificationUrl
+                )
 
-            pollForToken(body)
-        } catch (e: Exception) {
-            Log.e(TAG, "Device auth failed", e)
-            _authState.value = DeviceAuthState.Error(e.message ?: "Unknown error")
+                pollForToken(body)
+            } catch (e: Exception) {
+                Log.e(TAG, "Device auth failed", e)
+                _authState.value = DeviceAuthState.Error(e.message ?: "Unknown error")
+            }
         }
     }
 
@@ -272,10 +288,12 @@ class TraktAuthManager @Inject constructor(
             }
         }
         clearTokens()
+        deviceAuthJob?.cancel()
         _authState.value = DeviceAuthState.Idle
     }
 
     fun resetAuthState() {
+        deviceAuthJob?.cancel()
         _authState.value = DeviceAuthState.Idle
     }
 }
