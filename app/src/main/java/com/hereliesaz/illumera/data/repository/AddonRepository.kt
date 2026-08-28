@@ -353,6 +353,14 @@ class AddonRepository @Inject constructor(
 
     suspend fun installAddonWithConfig(url: String, home: Boolean, movies: Boolean, series: Boolean) = withContext(Dispatchers.IO) {
         val manifest = api.getManifest(url)
+        // Gson deserializes straight into the fields without honoring Kotlin's default
+        // values, so a manifest missing "id"/"name" would otherwise reach the DB as a
+        // literal null against a non-null Room column and crash with a raw
+        // SQLiteConstraintException instead of a meaningful error.
+        @Suppress("SENSELESS_COMPARISON")
+        if (manifest.id == null || manifest.name == null) {
+            throw IllegalArgumentException("This addon's manifest is missing a required field (id/name)")
+        }
         val transportUrl = url.removeSuffix("/manifest.json").trimEnd('/')
         val catalogsJson = gson.toJson(manifest.catalogs.orEmpty())
         val supportsMeta = manifest.resources?.any { element ->
@@ -370,14 +378,20 @@ class AddonRepository @Inject constructor(
             }
         } ?: false
 
+        // Re-installing an already-installed addon (e.g. re-pasting the same manifest
+        // URL) must not silently discard a nickname or per-catalog customizations the
+        // user already made — preserve them instead of overwriting with defaults.
+        val existingAddon = dao.getAddon(transportUrl)
         val entity = AddonEntity(
             transportUrl = transportUrl, id = manifest.id, name = manifest.name, version = manifest.version,
-            description = manifest.description, iconUrl = manifest.logo, isTrusted = false, isEnabled = true,
-            nickname = null, catalogsJson = catalogsJson,
+            description = manifest.description, iconUrl = manifest.logo,
+            isTrusted = existingAddon?.isTrusted ?: false, isEnabled = true,
+            nickname = existingAddon?.nickname, catalogsJson = catalogsJson,
             supportsMeta = supportsMeta,
             supportsStream = supportsStream,
             typesJson = gson.toJson(manifest.types.orEmpty()),
-            idPrefixesJson = gson.toJson(manifest.idPrefixes.orEmpty())
+            idPrefixesJson = gson.toJson(manifest.idPrefixes.orEmpty()),
+            sortOrder = existingAddon?.sortOrder ?: 999
         )
         dao.insertAddon(entity)
 
@@ -385,13 +399,19 @@ class AddonRepository @Inject constructor(
             val uniqueId = "${transportUrl}/${catalog.type}/${catalog.id}"
             val isMovieCat = catalog.type == "movie"
             val isSeriesCat = catalog.type == "series"
-            CatalogConfigEntity(
-                uniqueId = uniqueId, transportUrl = transportUrl, addonName = manifest.name,
-                catalogType = catalog.type, catalogId = catalog.id,
-                catalogName = catalog.name, customTitle = null,
-                showInHome = home, showInMovies = movies && isMovieCat, showInSeries = series && isSeriesCat,
-                homeOrder = 999, moviesOrder = 999, seriesOrder = 999
-            )
+            val existingConfig = dao.getCatalogConfig(uniqueId)
+            if (existingConfig != null) {
+                // Already configured — keep the user's customizations as-is.
+                existingConfig.copy(addonName = manifest.name, catalogName = catalog.name)
+            } else {
+                CatalogConfigEntity(
+                    uniqueId = uniqueId, transportUrl = transportUrl, addonName = manifest.name,
+                    catalogType = catalog.type, catalogId = catalog.id,
+                    catalogName = catalog.name, customTitle = null,
+                    showInHome = home, showInMovies = movies && isMovieCat, showInSeries = series && isSeriesCat,
+                    homeOrder = 999, moviesOrder = 999, seriesOrder = 999
+                )
+            }
         }
         dao.saveCatalogConfigs(newConfigs)
     }
