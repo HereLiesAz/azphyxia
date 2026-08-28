@@ -270,7 +270,7 @@ class IntegrationsViewModel @Inject constructor(
     // ── Trakt ──
 
     fun startTraktAuth() {
-        viewModelScope.launch { traktAuthManager.startDeviceAuth() }
+        traktAuthManager.startDeviceAuth()
     }
 
     fun disconnectTrakt() {

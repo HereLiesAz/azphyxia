@@ -2,10 +2,12 @@ package com.hereliesaz.illumera.ui.profiles
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hereliesaz.illumera.data.debrid.DebridManager
 import com.hereliesaz.illumera.data.local.AddonDao
 import com.hereliesaz.illumera.data.model.ProfileEntity
 import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
 import com.hereliesaz.illumera.data.remote.StremioAuthError
+import com.hereliesaz.illumera.data.trakt.TraktAuthManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
@@ -17,7 +19,9 @@ import javax.inject.Inject
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val dao: AddonDao,
-    private val profileConfigurationManager: ProfileConfigurationManager
+    private val profileConfigurationManager: ProfileConfigurationManager,
+    private val debridManager: DebridManager,
+    private val traktAuthManager: TraktAuthManager
 ) : ViewModel() {
 
     private val _profiles = MutableStateFlow<List<ProfileEntity>>(emptyList())
@@ -185,6 +189,8 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             dao.deleteProfile(id)
             profileConfigurationManager.deleteProfileState(id)
+            debridManager.clearForProfile(id)
+            traktAuthManager.clearTokensForProfile(id)
         }
     }
 
