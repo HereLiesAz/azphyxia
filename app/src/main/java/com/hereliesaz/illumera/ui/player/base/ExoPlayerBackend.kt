@@ -8,7 +8,6 @@ import android.content.pm.PackageManager
 import android.content.res.Configuration
 import android.net.Uri
 import android.os.Build
-import android.os.SystemClock
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
@@ -195,10 +194,6 @@ class ExoPlayerBackend(
     private var externalSubtitleLabelKeys: Map<String, String?> = emptyMap()
     private var okHttpClient: OkHttpClient? = null
     private var forcedSubtitleTrackId: String? = null
-    private var bufferingAnchorPositionMs: Long = C.TIME_UNSET
-    private var bufferingAnchorElapsedMs: Long = 0L
-    private var lastBufferingRecoveryAttemptMs: Long = 0L
-    private var sourcePreparedElapsedMs: Long = 0L
     private var ioAutoRetrySourceId: String? = null
     private var ioAutoRetryCountForCurrentSource: Int = 0
     private var hasRetriedCurrentSourceAfter416: Boolean = false
@@ -860,10 +855,6 @@ class ExoPlayerBackend(
         subtitleFormatHintsByTrackId.clear()
         subtitleFormatHintsByLabelLanguage.clear()
         subtitleFormatHintsByLabel.clear()
-        bufferingAnchorPositionMs = C.TIME_UNSET
-        bufferingAnchorElapsedMs = 0L
-        lastBufferingRecoveryAttemptMs = 0L
-        sourcePreparedElapsedMs = 0L
         ioAutoRetrySourceId = null
         ioAutoRetryCountForCurrentSource = 0
         pendingStartPositionMs = 0L
@@ -901,9 +892,6 @@ class ExoPlayerBackend(
 
         audioSwitchRecoveryJob?.cancel()
         audioSwitchRecoveryJob = null
-        bufferingAnchorPositionMs = C.TIME_UNSET
-        bufferingAnchorElapsedMs = SystemClock.elapsedRealtime()
-        sourcePreparedElapsedMs = bufferingAnchorElapsedMs
 
         _uiState.update {
             it.copy(
@@ -984,6 +972,14 @@ class ExoPlayerBackend(
             } else {
                 mediaSource
             }
+
+            // Re-check staleness: the yields above are suspension points where a
+            // competing prepareSource() call (another source switch, or the
+            // auto-retry path) can have already advanced loadToken. Without this,
+            // whichever call happens to reach setMediaSource()/prepare() last wins
+            // by scheduling luck rather than by request order, and can load the
+            // wrong source onto the shared player.
+            if (loadToken != token || released) return@launch
 
             player.setMediaSource(finalMediaSource)
 

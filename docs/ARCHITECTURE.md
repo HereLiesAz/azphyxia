@@ -80,9 +80,12 @@ skew there is dangerous.
 
 `data/model/stremio/` holds the manifest/catalog/meta/stream models.
 `AddonRepository` fetches catalogs page-by-page (skip-based pagination,
-capped at 30 pages), searches Cinemeta directly for movies/series in
-parallel, sanitizes malformed catalog entries, and applies per-request
-timeouts (10s catalog, 20s stream) — all through `StremioApiService`
+terminating when a page comes back empty or entirely duplicate — there is
+currently no hard page-count ceiling despite a `MAX_CATALOG_PAGES = 30`
+constant on the class; it's unused dead code, not an enforced cap),
+searches Cinemeta directly for movies/series in parallel, sanitizes
+malformed catalog entries, and applies per-request timeouts (10s catalog,
+20s stream) — all through `StremioApiService`
 (Retrofit). `ui/addons/AddonsScreen` manages install/uninstall/reorder;
 addons can be added by manifest URL, by QR-paired remote paste from a
 phone, or synced from a connected Stremio account.
