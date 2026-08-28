@@ -112,10 +112,23 @@ object DefaultThemes {
         category = "dark"
     )
 
+    val ILLUMERA = ThemeEntity(
+        id = "illumera",
+        name = "Illumera",
+        primaryColor = 0xFFFF2E7A,      // Logo Pink
+        backgroundColor = 0xFF1A0510,   // Deep Magenta-Black
+        surfaceColor = 0xFF2A0D1C,
+        textColor = 0xFFFFF0F5,
+        textMutedColor = 0xFFFFAB6B,    // Logo Orange
+        errorColor = 0xFFFF1744,
+        isBuiltIn = true,
+        category = "colorful"
+    )
+
     /**
      * All built-in themes in display order.
      */
-    val ALL = listOf(VOID, NEON, OCEAN, SUNSET, EMERALD, AMBER, CRIMSON, SLATE)
+    val ALL = listOf(VOID, ILLUMERA, NEON, OCEAN, SUNSET, EMERALD, AMBER, CRIMSON, SLATE)
 
     /**
      * Get a built-in theme by ID, returns VOID as fallback.
