@@ -153,6 +153,12 @@ illumera/
 └── build.gradle.kts        # Root build configuration
 ```
 
+## Documentation
+
+Deeper reference docs — architecture, the release pipeline (including the
+custom Media3/ExoPlayer build), theming, and branding — live in
+[`docs/`](docs/README.md).
+
 ## Disclaimer
 
 illumera is a media client that connects to third-party addons. It does not host, distribute, or provide any copyrighted content. Users are solely responsible for the addons they install and the content they access. This software is intended for streaming media you legally own or have the right to view. The developers do not condone piracy in any form.

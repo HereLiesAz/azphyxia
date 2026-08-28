@@ -1,0 +1,113 @@
+# Release pipeline
+
+## Overview
+
+Every push to `main` (and manual `workflow_dispatch`) runs
+[`.github/workflows/release.yml`](../.github/workflows/release.yml), which
+builds a signed release APK and publishes it as a GitHub Release. No tag
+needs to be pushed by hand — the workflow derives its own version and tags
+the release itself.
+
+`AppUpdateManager` (in-app) polls this repo's *latest* non-prerelease
+release, so the release shape must keep matching what it expects: exactly
+one `*.apk` asset, and a `SHA-256: <64 hex chars>` line in the release body.
+
+## Versioning
+
+`versionName` is `MAJOR.MINOR.<run number>` — `MAJOR.MINOR` is read from the
+base `versionName` in `app/build.gradle.kts`, and the GitHub Actions run
+number becomes the patch component (e.g. `0.4.23`). This is guaranteed to
+strictly increase every run, which both Android's package installer and
+`AppUpdateManager`'s version comparison require to recognize an upgrade.
+
+## Signing
+
+Falls back to a fixed, non-secret CI keystore
+(`ci/ci-debug.keystore` — see [`../ci/README.md`](../ci/README.md)) unless
+`KEYSTORE_RAW`/`KEYSTORE_PASSWORD`/`KEY_ALIAS`/`KEY_PASSWORD` secrets are
+set on the repo, in which case it signs with those instead. Switching
+keystores is one-way for already-installed users (Android refuses to
+"upgrade" across a signing-certificate mismatch) — see that doc before
+changing it.
+
+## The Stremio playback module rebuild
+
+This is the most fragile part of the pipeline, worth understanding in full
+before touching it.
+
+illumera doesn't use stock `androidx.media3` for its ExoPlayer core and
+decoder extensions — it uses **Stremio's own fork** (`Stremio/media`),
+built from source on every release and linked in as local AARs:
+
+```
+playbackcore/libs/lib-exoplayer-release.aar
+playbackcore/libs/lib-decoder-av1-release.aar
+playbackcore/libs/lib-decoder-ffmpeg-release.aar
+playbackcore/libs/lib-decoder-iamf-release.aar
+playbackcore/libs/lib-decoder-mpegh-release.aar
+```
+
+`app/build.gradle.kts` pulls these in via `implementation(files(...))`
+alongside the stock `media3-common`/`media3-ui`/`media3-session`/etc.
+artifacts declared in `gradle/libs.versions.toml` (`media3` version). **These
+two must be built from binary-compatible Media3 versions.** ExoPlayer's
+internals aren't guaranteed stable across minor versions, so pairing a
+stale `lib-exoplayer-release.aar` against a newer `media3-common` (or vice
+versa) produces a `NoSuchMethodError`/`LinkageError` — and because these
+classes only load lazily when `ExoPlayer.Builder(...).build()` runs, the
+symptom is: **the app opens fine and crashes only when you start
+playback.** This exact bug shipped in a real release once (see the commit
+history around `f3493c4`/`d2d5629`/`16a16b7` and
+[`HereLiesAz/illumera#18`](https://github.com/HereLiesAz/illumera/pull/18)
+for the full incident) — if you ever see that symptom reported, check this
+first.
+
+### How the rebuild works
+
+In `release.yml`:
+
+1. `STREMIO_MEDIA_REF` (a pinned commit SHA) and `STREMIO_AAR_CACHE_VERSION`
+   are set as env vars at the top of the job. Bump
+   `STREMIO_AAR_CACHE_VERSION` whenever you change anything about how the
+   AARs are built (toolchain, script) without changing `STREMIO_MEDIA_REF`,
+   so stale cached artifacts can't be reused.
+2. The Stremio/media AARs are cached by `(STREMIO_MEDIA_REF, cache version)`.
+   On a cache miss, `Stremio/media` is checked out at that ref and
+   [`ci/build-stremio-media.sh`](../ci/build-stremio-media.sh) builds
+   `:lib-exoplayer`, `:lib-decoder-av1`, `:lib-decoder-ffmpeg`,
+   `:lib-decoder-iamf`, `:lib-decoder-mpegh` with Gradle, using a pinned NDK
+   (`27.0.12077973`) and CMake version.
+3. The five resulting AARs are copied into `playbackcore/libs/`, overwriting
+   whatever was checked into the repo, **before** `assembleRelease` runs.
+   The workflow refuses to publish if any of the five is missing.
+
+**Important:** the AARs checked into `playbackcore/libs/` in git are
+therefore only ever used by a local `./gradlew assembleDebug`/`assembleRelease`
+— the actual published release always gets a freshly-built set matching
+`STREMIO_MEDIA_REF`. If you build locally without also running
+`ci/build-stremio-media.sh` yourself, you're using whatever stale AARs
+happen to be checked in, which is exactly the trap above.
+
+Gotcha specific to `Stremio/media`'s build: its root `gradle.properties` sets
+`buildDir=buildout`, which Gradle applies as a project property to *every*
+subproject — so each module's build output lands under
+`<module>/buildout/outputs/aar/`, not the Gradle-default
+`<module>/build/outputs/aar/`. `build-stremio-media.sh`'s
+`copy_release_aar()` checks both locations for this reason.
+
+### Bumping the Media3 version
+
+To move to a newer Media3 base:
+
+1. Update `media3` in `gradle/libs.versions.toml`.
+2. Update `STREMIO_MEDIA_REF` to a `Stremio/media` commit built against a
+   compatible (ideally identical) Media3 version, and bump
+   `STREMIO_AAR_CACHE_VERSION`.
+3. Push to a branch and watch the "Build and Release APK" workflow run
+   through to a successful, published release — a green build is the only
+   real confirmation the pairing is compatible; there's no offline check
+   for this. If it fails, read the actual Gradle error in the failed job's
+   logs rather than assuming it's the version pairing — the two failures
+   this pipeline has actually hit in practice were CI/toolchain issues
+   (wrong NDK version, wrong output-directory assumption), not Media3
+   incompatibility.
