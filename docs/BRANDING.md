@@ -31,27 +31,30 @@ built-in theme (see [`THEMING.md`](THEMING.md)):
 
 | Location | Resource |
 |----------|----------|
-| App launcher icon (adaptive) | `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` → `drawable/ic_launcher_foreground.xml` + `ic_launcher_background.xml` (solid black) + `ic_launcher_monochrome.xml` (white silhouette, for themed icons) |
-| Legacy launcher icon (pre-adaptive-icon fallback, unused at runtime since `minSdk 26`) | `app/src/main/res/mipmap-{m,h,x,xx,xxx}dpi/ic_launcher.png` |
-| Android TV launcher banner | `app/src/main/res/drawable-xxhdpi/banner.png` (320×180, "ILLUMERA" wordmark) |
-| In-app logo (splash screen, settings) | `app/src/main/res/drawable/ic_illumera_logo.xml`, referenced from `MainActivity.kt` and `ui/settings/SettingsSubScreens.kt` |
-| README header | `screenshots/banner.png` |
+| App launcher icon (adaptive) | `app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml` → `drawable-nodpi/ic_launcher_foreground.png` (from `illumera.png`) + `drawable/ic_launcher_background.xml` (solid black vector) + `drawable-nodpi/ic_launcher_monochrome.png` (white alpha-mask silhouette, for themed icons — solid white in the shape, fully transparent outside, so it looks blank against a white preview background by design) |
+| Legacy launcher icon (pre-adaptive-icon fallback, unused at runtime since `minSdk 26`) | `app/src/main/res/mipmap-{m,h,x,xx,xxx}dpi/ic_launcher.png` (scaled from `illumera2.png`) |
+| Android TV launcher banner | `app/src/main/res/drawable-xxhdpi/banner.png` (320×180, real logo + "ILLUMERA" wordmark on black) |
+| In-app logo (splash screen, settings) | `app/src/main/res/drawable-nodpi/logo_illumera.png` (tightly cropped from `illumera.png`), referenced from `MainActivity.kt` and `ui/settings/SettingsSubScreens.kt` as `R.drawable.logo_illumera` |
+| README header | `screenshots/banner.png` (real logo + "ILLUMERA" wordmark on white) |
 
 ### Updating the logo
 
-If the mark ever changes, regenerate every asset in the table above from
-the new master PNGs/vector — don't patch individual derived files by hand,
+All in-app/launcher assets above are PNGs derived directly from
+`illumera.png`/`illumera2.png` — there is no hand-traced vector recreation
+anymore (an earlier hand-drawn `<vector>` approximation was replaced with
+crops/scales of the real master artwork). If the mark ever changes, replace
+the two master PNGs in this folder and regenerate every derived asset in
+the table above from them — don't patch individual derived files by hand,
 or they'll drift out of sync with each other (this happened once already:
 `screenshots/banner.png` kept a pre-rebrand "LUMERA" wordmark long after the
 rest of the app moved to "illumera").
 
-The adaptive icon foreground/monochrome are Android vector drawables
-(`<vector>` XML), not references to a PNG — so a logo change means
-re-tracing the shape as vector path data, or embedding a scaled raster
-inside the vector drawable, then re-centering it inside the adaptive icon's
-safe zone (a circle 66dp in diameter, centered in the 108×108dp canvas —
-see the `scaleX`/`scaleY`/`translateX`/`translateY` values already in
-`ic_launcher_foreground.xml` for the math).
+The adaptive icon foreground is a straight scale of `illumera.png` to
+432×432 — the master art already has generous padding around the triangle
+(content occupies roughly the center 41% of the 512×512 canvas), which
+comfortably clears the adaptive icon's safe zone (a circle 66dp in diameter
+centered in the 108×108dp canvas) without any extra insetting. The
+monochrome layer is the same artwork's alpha channel filled solid white.
 
 ## Naming
 
