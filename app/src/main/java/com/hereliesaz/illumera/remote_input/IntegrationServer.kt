@@ -23,6 +23,7 @@ class IntegrationServer(
     companion object {
         private const val TAG = "IntegrationServer"
         private const val MAX_IMAGE_SIZE = 5 * 1024 * 1024 // 5 MB
+        private const val MAX_FIELD_LENGTH = 1024
     }
 
     override fun serve(session: IHTTPSession): Response {
@@ -276,6 +277,9 @@ class IntegrationServer(
 
             if (email.isNullOrBlank() || password.isNullOrBlank()) {
                 return jsonResponse(false, "Email and password are required")
+            }
+            if (email.length > MAX_FIELD_LENGTH || password.length > MAX_FIELD_LENGTH) {
+                return jsonResponse(false, "Input too long")
             }
 
             // Forward credentials to the app on main thread

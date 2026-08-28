@@ -47,6 +47,7 @@ fun HubBulkUploadDialog(
     onImageDeleted: ((String) -> Unit)? = null // callback(configUniqueId)
 ) {
     var serverUrl by remember { mutableStateOf<String?>(null) }
+    var serverError by remember { mutableStateOf(false) }
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     val focusRequester = remember { FocusRequester() }
 
@@ -62,7 +63,8 @@ fun HubBulkUploadDialog(
             onImageDeleted = onImageDeleted
         )
         serverUrl = url
-        
+        if (url == null) serverError = true
+
         // Generate QR
         if (url != null) {
             withContext(Dispatchers.IO) {
@@ -159,6 +161,12 @@ fun HubBulkUploadDialog(
                             modifier = Modifier.padding(top = 4.dp)
                         )
                     }
+                } else if (serverError) {
+                    Text(
+                        "Could not start the upload server. Check your network connection and try again.",
+                        color = Color.Gray,
+                        textAlign = TextAlign.Center
+                    )
                 } else {
                     CircularProgressIndicator(
                         color = MaterialTheme.colorScheme.primary,

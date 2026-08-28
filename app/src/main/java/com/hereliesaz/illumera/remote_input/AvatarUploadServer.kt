@@ -475,6 +475,12 @@ class AvatarUploadServer(
             val base64Image = session.parms["image"]
 
             if (!base64Image.isNullOrBlank()) {
+                // Reject on the encoded length before the (much larger) decode allocation —
+                // base64 is ~4/3 the size of the decoded bytes, so this bounds the second
+                // full-size copy the request would otherwise force onto the heap.
+                if (base64Image.length > MAX_IMAGE_SIZE * 2) {
+                    return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Image too large (max 5 MB)")
+                }
                 val imageBytes = Base64.decode(base64Image, Base64.DEFAULT)
 
                 // Reject oversized uploads

@@ -17,10 +17,12 @@ class HubBulkUploadServer(
     private val onImageDeleted: ((String) -> Unit)? = null
 ) : NanoHTTPD(port) {
 
-    // Track images uploaded during this session for preview and status updates
-    private val uploadedPreviews = mutableMapOf<String, String>()
+    // Track images uploaded during this session for preview and status updates.
+    // NanoHTTPD services each connection on its own thread, so these need to be
+    // thread-safe against concurrent /upload and /delete requests.
+    private val uploadedPreviews = java.util.Collections.synchronizedMap(mutableMapOf<String, String>())
     // Track images deleted during this session
-    private val deletedIds = mutableSetOf<String>()
+    private val deletedIds = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val csrfToken = UUID.randomUUID().toString()
 
     companion object {
@@ -83,6 +85,12 @@ class HubBulkUploadServer(
                 })
             }
         }.toString()
+            // Gson's default JsonWriter doesn't HTML-escape, so an addon-supplied
+            // catalog title containing "</script>" would break out of the inline
+            // <script> block below. < is valid inside a JSON string and decodes
+            // back to '<' at parse time, so this neutralizes the breakout without
+            // altering the data.
+            .replace("<", "\\u003c")
 
         val html = """
             <!DOCTYPE html>
@@ -498,6 +506,12 @@ class HubBulkUploadServer(
 
             val base64Image = session.parms["image"]
             if (!base64Image.isNullOrBlank()) {
+                // Reject on the encoded length before the (much larger) decode allocation —
+                // base64 is ~4/3 the size of the decoded bytes, so this bounds the second
+                // full-size copy the request would otherwise force onto the heap.
+                if (base64Image.length > MAX_IMAGE_SIZE * 2) {
+                    return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "Image too large (max 5 MB)")
+                }
                 val imageBytes = Base64.decode(base64Image, Base64.DEFAULT)
 
                 if (imageBytes.size > MAX_IMAGE_SIZE) {

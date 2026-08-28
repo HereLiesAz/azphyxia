@@ -21,33 +21,41 @@ object HubServerManager {
      * @param onImageReceived Callback when an image is uploaded for a specific ID
      * @return The URL string for QR code generation, or null on failure
      */
+    private const val PORT_START = 8085
+    private const val PORT_END = 8095
+
     fun startBulkServer(
         items: List<com.hereliesaz.illumera.data.model.HubRowItemEntity>,
         shape: HubShape,
-        port: Int = 8085,
         onImageReceived: (String, ByteArray) -> Unit,
         onImageDeleted: ((String) -> Unit)? = null
     ): String? {
         stopServer()
 
-        return try {
-            val pairingToken = java.util.UUID.randomUUID().toString()
-            server = HubBulkUploadServer(
-                port = port,
-                pairingToken = pairingToken,
-                items = items,
-                shape = shape,
-                onImageReceived = onImageReceived,
-                onImageDeleted = onImageDeleted
-            )
-            server?.start()
+        val ip = NetworkUtils.getLocalIpAddress() ?: return null
+        val pairingToken = java.util.UUID.randomUUID().toString()
 
-            val ip = NetworkUtils.getLocalIpAddress()
-            if (ip != null) "http://$ip:$port/?pin=$pairingToken" else null
-        } catch (e: Exception) {
-            if (com.hereliesaz.illumera.BuildConfig.DEBUG) android.util.Log.w("HubServerManager", "Server start failed", e)
-            null
+        for (port in PORT_START..PORT_END) {
+            try {
+                val bulkServer = HubBulkUploadServer(
+                    port = port,
+                    pairingToken = pairingToken,
+                    items = items,
+                    shape = shape,
+                    onImageReceived = onImageReceived,
+                    onImageDeleted = onImageDeleted
+                )
+                bulkServer.start()
+                server = bulkServer
+                return "http://$ip:$port/?pin=$pairingToken"
+            } catch (e: java.net.BindException) {
+                continue // Port in use, try next
+            } catch (e: Exception) {
+                if (com.hereliesaz.illumera.BuildConfig.DEBUG) android.util.Log.w("HubServerManager", "Server start failed", e)
+                continue
+            }
         }
+        return null
     }
 
     /**

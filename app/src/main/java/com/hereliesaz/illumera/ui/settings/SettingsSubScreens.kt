@@ -2058,10 +2058,40 @@ fun AboutSettings(
         if (updateState is UpdateState.ReadyToInstall) {
             Spacer(Modifier.height(16.dp))
             Text(
-                "Download complete. Installing...",
+                "Download complete. If the install screen didn't open, tap below.",
                 color = accentColor,
                 style = MaterialTheme.typography.bodyMedium.copy(fontSize = 14.sp)
             )
+            Spacer(Modifier.height(8.dp))
+            val retryInteraction = remember { MutableInteractionSource() }
+            val isRetryFocused by retryInteraction.collectIsFocusedAsState()
+            val retryScale by animateFloatAsState(if (isRetryFocused) 1.02f else 1f)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp)
+                    .scale(retryScale)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (isRetryFocused) accentColor.copy(0.3f) else accentColor.copy(0.15f))
+                    .border(
+                        if (isRetryFocused) 1.dp else 0.dp,
+                        if (isRetryFocused) accentColor else Color.Transparent,
+                        RoundedCornerShape(8.dp)
+                    )
+                    .clickable(interactionSource = retryInteraction, indication = null) {
+                        updateManager.retryInstall()
+                    }
+                    .focusable(interactionSource = retryInteraction)
+                    .padding(horizontal = 16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                Text(
+                    "Install Now",
+                    color = Color.White,
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+                )
+            }
         }
     }
 }
