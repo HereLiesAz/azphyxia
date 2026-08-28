@@ -1036,7 +1036,15 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(navPosition) {
                             if (activeView == "menu" && currentNav == NavDestination.Settings) {
                                 delay(450) // Wait for Crossfade (400ms) + buffer
-                                settingsEntryRequester.requestFocus()
+                                // Re-check after the delay: the user may have navigated away from
+                                // Settings while this was pending, unmounting the FocusRequester's
+                                // only attachment point and making requestFocus() throw.
+                                if (activeView == "menu" && currentNav == NavDestination.Settings) {
+                                    try {
+                                        settingsEntryRequester.requestFocus()
+                                    } catch (_: IllegalStateException) {
+                                    }
+                                }
                             }
                         }
 
@@ -1213,11 +1221,19 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 }
                                                 NavDestination.Profile -> {
-                                                    sessionProfileId = null
-                                                    sessionRestoreAttemptedProfileId = null
-                                                    activeView = "menu"
-                                                    themeManager.resetTheme()
-                                                    mainViewModel.logout()
+                                                    // logout() is a side effect, not a render — run it once via
+                                                    // LaunchedEffect rather than inline in the composable body.
+                                                    // logout() persists runtime state on IO before flipping
+                                                    // currentProfile to null, and nothing here moves currentNav
+                                                    // away from Profile in the meantime, so calling it inline
+                                                    // re-fired it on every recomposition until that IO completed.
+                                                    LaunchedEffect(Unit) {
+                                                        sessionProfileId = null
+                                                        sessionRestoreAttemptedProfileId = null
+                                                        activeView = "menu"
+                                                        themeManager.resetTheme()
+                                                        mainViewModel.logout()
+                                                    }
                                                 }
                                                 NavDestination.Watchlist -> {
                                                     val watchlistHomeVm = hiltViewModel<HomeViewModel>()
@@ -1366,11 +1382,19 @@ class MainActivity : ComponentActivity() {
                                                     )
                                                 }
                                                 NavDestination.Profile -> {
-                                                    sessionProfileId = null
-                                                    sessionRestoreAttemptedProfileId = null
-                                                    activeView = "menu"
-                                                    themeManager.resetTheme()
-                                                    mainViewModel.logout()
+                                                    // logout() is a side effect, not a render — run it once via
+                                                    // LaunchedEffect rather than inline in the composable body.
+                                                    // logout() persists runtime state on IO before flipping
+                                                    // currentProfile to null, and nothing here moves currentNav
+                                                    // away from Profile in the meantime, so calling it inline
+                                                    // re-fired it on every recomposition until that IO completed.
+                                                    LaunchedEffect(Unit) {
+                                                        sessionProfileId = null
+                                                        sessionRestoreAttemptedProfileId = null
+                                                        activeView = "menu"
+                                                        themeManager.resetTheme()
+                                                        mainViewModel.logout()
+                                                    }
                                                 }
                                                 NavDestination.Watchlist -> {
                                                     val watchlistHomeVm = hiltViewModel<HomeViewModel>()
@@ -1419,6 +1443,15 @@ class MainActivity : ComponentActivity() {
                                 } // Crossfade end
                                 } // Double-back Box end
                         } else if (view == "grid") {
+                            // gridViewItems isn't rememberSaveable (MetaItem isn't Parcelable), so a
+                            // process-death recreation restores gridViewConfigId/gridViewTitle but
+                            // loses the items themselves, leaving a header with nothing under it.
+                            // Bounce back to Home rather than show that broken empty screen.
+                            LaunchedEffect(Unit) {
+                                if (gridViewConfigId.isNotEmpty() && gridViewItems.isEmpty()) {
+                                    activeView = "menu"
+                                }
+                            }
                             val gridVm = hiltViewModel<HomeViewModel>()
                             GridViewScreen(
                                 title = gridViewTitle,
@@ -1676,7 +1709,19 @@ class MainActivity : ComponentActivity() {
                             }
                         }
                         if (view == "player") {
-                            if (selectedVideoUrl.isBlank() && torrentProgress == null) {
+                            if (selectedVideoUrl.isNotBlank() && playerState.currentStream == null) {
+                                // playerState (subtitles, alternate sources, episode list, current
+                                // stream) is a plain `remember`, so it resets to empty on Activity
+                                // recreation even though selectedVideoUrl survives via
+                                // rememberSaveable and would otherwise resume a degraded, silently
+                                // broken player session. Every legitimate playback start sets
+                                // currentStream alongside selectedVideoUrl, so seeing one without
+                                // the other only happens after this kind of recreation — send the
+                                // user back to Details to re-resolve properly instead.
+                                LaunchedEffect(Unit) {
+                                    activeView = "details"
+                                }
+                            } else if (selectedVideoUrl.isBlank() && torrentProgress == null) {
                                 // torrentProgress resets to null (plain `remember`) on Activity
                                 // recreation even when a TorrentService download is still running
                                 // (its foreground service survives independently). Stop it here so
