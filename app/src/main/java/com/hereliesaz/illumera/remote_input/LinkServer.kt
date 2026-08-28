@@ -19,6 +19,10 @@ class LinkServer(
     private val mainHandler = Handler(Looper.getMainLooper())
     private val csrfToken = UUID.randomUUID().toString()
 
+    companion object {
+        private const val MAX_URL_LENGTH = 4096
+    }
+
     override fun serve(session: IHTTPSession): Response {
         if (session.uri == "/ping") return DisconnectBanner.pingResponse()
         // Require the pairing token from the QR/link URL on every request — proves
@@ -190,6 +194,9 @@ class LinkServer(
             val url = session.parms["url"]
 
             if (!url.isNullOrBlank()) {
+                if (url.length > MAX_URL_LENGTH) {
+                    return newFixedLengthResponse(Response.Status.BAD_REQUEST, MIME_PLAINTEXT, "URL too long")
+                }
                 // Validate URL scheme
                 val scheme = Uri.parse(url).scheme?.lowercase()
                 if (scheme != "http" && scheme != "https") {

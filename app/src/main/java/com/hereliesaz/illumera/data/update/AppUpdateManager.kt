@@ -75,10 +75,6 @@ class AppUpdateManager @Inject constructor(
         _state.value = UpdateState.Checking
         try {
             val release = withContext(Dispatchers.IO) { fetchLatestRelease() }
-            if (release == null) {
-                _state.value = UpdateState.UpToDate
-                return
-            }
 
             val remoteVersion = release.tagName.removePrefix("v")
             val currentVersion = BuildConfig.VERSION_NAME
@@ -104,12 +100,18 @@ class AppUpdateManager @Inject constructor(
             } else {
                 _state.value = UpdateState.UpToDate
             }
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             _state.value = UpdateState.Error(e.message ?: "Failed to check for updates.")
         }
     }
 
     suspend fun downloadAndInstall(apkUrl: String) {
+        // Re-entrancy guard: a rapid double-press on the "Download & Install" row (or the
+        // auto-popup and Settings both triggering it) would otherwise start two concurrent
+        // downloads truncating and writing the same cache file, corrupting it mid-transfer.
+        if (_state.value is UpdateState.Downloading) return
         if (!isAllowedDownloadUrl(apkUrl)) {
             _state.value = UpdateState.Error("Download URL is not from a trusted source.")
             return
@@ -132,6 +134,8 @@ class AppUpdateManager @Inject constructor(
             }
             _state.value = UpdateState.ReadyToInstall(apkFile)
             installApk(apkFile)
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
         } catch (e: Exception) {
             _state.value = UpdateState.Error("Download failed: ${e.message}")
         }
@@ -141,7 +145,22 @@ class AppUpdateManager @Inject constructor(
         _state.value = UpdateState.Idle
     }
 
-    private fun fetchLatestRelease(): GitHubRelease? {
+    /** Re-launch the installer for an APK that already finished downloading and verifying. */
+    fun retryInstall() {
+        val file = (_state.value as? UpdateState.ReadyToInstall)?.file ?: return
+        if (!file.exists()) {
+            _state.value = UpdateState.Error("Downloaded update is no longer available. Please check for updates again.")
+            return
+        }
+        installApk(file)
+    }
+
+    /**
+     * Throws on a non-2xx response or an unparseable body instead of returning null — those are
+     * a failed check (rate limit, outage), not evidence there's no newer release. Conflating them
+     * used to report "You're up to date" for a check that never actually completed.
+     */
+    private fun fetchLatestRelease(): GitHubRelease {
         val url = "https://api.github.com/repos/${BuildConfig.GITHUB_OWNER}/${BuildConfig.GITHUB_REPO}/releases/latest"
         val request = Request.Builder()
             .url(url)
@@ -149,10 +168,11 @@ class AppUpdateManager @Inject constructor(
             .build()
 
         val response = okHttpClient.newCall(request).execute()
-        if (!response.isSuccessful) return null
+        if (!response.isSuccessful) throw Exception("Update check failed: HTTP ${response.code}")
 
-        val body = response.body?.string() ?: return null
+        val body = response.body?.string() ?: throw Exception("Update check failed: empty response")
         return gson.fromJson(body, GitHubRelease::class.java)
+            ?: throw Exception("Update check failed: malformed response")
     }
 
     private fun downloadApk(apkUrl: String): File {

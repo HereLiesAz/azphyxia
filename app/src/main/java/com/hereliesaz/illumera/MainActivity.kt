@@ -477,6 +477,61 @@ private fun UpdateErrorDialog(
     }
 }
 
+@Composable
+private fun UpdateReadyToInstallDialog(
+    onInstall: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .width(480.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.background)
+                .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(16.dp))
+                .padding(24.dp)
+        ) {
+            androidx.compose.foundation.layout.Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(
+                    "Update Ready",
+                    style = MaterialTheme.typography.headlineSmall,
+                    color = Color.White,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(12.dp))
+                Text(
+                    "The update finished downloading. If the install screen didn't open, tap Install.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(0.7f),
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Spacer(Modifier.height(24.dp))
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    VoidButton(
+                        text = "Dismiss",
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f)
+                    )
+                    VoidButton(
+                        text = "Install",
+                        onClick = onInstall,
+                        isPrimary = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+        }
+    }
+}
+
 private fun buildSourcePayload(
     streams: List<Stream>,
     selectedStream: Stream
@@ -2286,6 +2341,15 @@ class MainActivity : ComponentActivity() {
                                         appUpdateManager.resetState()
                                         updateScope.launch { appUpdateManager.checkForUpdate() }
                                     },
+                                    onDismiss = {
+                                        appUpdateManager.resetState()
+                                        updateDismissed = true
+                                    }
+                                )
+                            }
+                            is UpdateState.ReadyToInstall -> {
+                                UpdateReadyToInstallDialog(
+                                    onInstall = { appUpdateManager.retryInstall() },
                                     onDismiss = {
                                         appUpdateManager.resetState()
                                         updateDismissed = true
