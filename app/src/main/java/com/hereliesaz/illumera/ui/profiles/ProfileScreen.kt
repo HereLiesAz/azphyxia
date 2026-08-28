@@ -846,7 +846,7 @@ fun WizardNameStep(initialName: String, onNext: (String) -> Unit, onCancel: () -
                 onValueChange = { name = it },
                 placeholder = "Enter Name",
                 modifier = Modifier.focusRequester(focusRequester),
-                onDone = { if(name.isNotEmpty()) onNext(name) }
+                onDone = { name.trim().let { if (it.isNotEmpty()) onNext(it) } }
             )
         }
     }

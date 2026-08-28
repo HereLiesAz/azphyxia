@@ -76,6 +76,12 @@ interface AddonDao {
     @Query("DELETE FROM profiles WHERE id = :id")
     suspend fun deleteProfile(id: Int)
 
+    @Query("DELETE FROM watchlist WHERE profileId = :profileId")
+    suspend fun deleteWatchlistForProfile(profileId: Int)
+
+    @Query("DELETE FROM series_next_up WHERE profileId = :profileId")
+    suspend fun deleteSeriesNextUpForProfile(profileId: Int)
+
     @Query("SELECT * FROM watch_history ORDER BY lastWatched DESC")
     fun getWatchHistory(): Flow<List<WatchHistoryEntity>>
 
