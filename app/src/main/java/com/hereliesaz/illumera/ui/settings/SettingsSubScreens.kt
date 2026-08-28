@@ -1863,7 +1863,7 @@ fun AboutSettings(
     ) {
         // LOGO
         Image(
-            painter = painterResource(id = R.drawable.ic_illumera_logo),
+            painter = painterResource(id = R.drawable.logo_illumera),
             contentDescription = "illumera",
             modifier = Modifier
                 .padding(bottom = 12.dp)

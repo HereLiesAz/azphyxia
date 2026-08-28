@@ -797,7 +797,7 @@ class MainActivity : ComponentActivity() {
         }
 
         val logo = android.widget.ImageView(this).apply {
-            setImageResource(R.drawable.ic_illumera_logo)
+            setImageResource(R.drawable.logo_illumera)
             scaleType = android.widget.ImageView.ScaleType.FIT_CENTER
         }
         val logoSize = (140 * density).toInt()
