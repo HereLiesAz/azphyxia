@@ -18,11 +18,14 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.BringIntoViewSpec
 import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Keyboard
@@ -66,6 +69,8 @@ import com.hereliesaz.illumera.ui.components.LumeraCard
 import com.hereliesaz.illumera.ui.details.FilterDropdown
 import com.hereliesaz.illumera.ui.home.DpadRepeatGate
 import com.hereliesaz.illumera.ui.home.ViewMoreCard
+import com.hereliesaz.illumera.ui.util.rememberIsTvDevice
+import com.hereliesaz.illumera.ui.util.touchClick
 import com.hereliesaz.illumera.ui.utils.ImagePrefetcher
 import kotlinx.coroutines.delay
 
@@ -126,6 +131,7 @@ fun SearchScreen(
         }
     }
 
+    val isTv = rememberIsTvDevice()
     val topPadding = if (isTopNav) 48.dp else 0.dp
     val startPadding = if (isTopNav) 50.dp else 90.dp
 
@@ -138,6 +144,17 @@ fun SearchScreen(
             }
     ) {
         LumeraBackground {
+        if (!isTv) {
+            TouchSearchLayout(
+                state = state,
+                viewModel = viewModel,
+                currentProfile = currentProfile,
+                onMovieClick = onMovieClick,
+                onDiscoverClick = onDiscoverClick,
+                watchedIds = watchedIds
+            )
+            return@LumeraBackground
+        }
         Row(
             modifier = Modifier
                 .fillMaxSize()
@@ -547,6 +564,186 @@ fun SearchScreen(
     }
 }
 
+/**
+ * Touch layout for phones/tablets. The TV layout's fixed 240dp keyboard column plus its
+ * paddings only fits on TV-sized canvases — on a phone it leaves no room for results. Touch
+ * devices already have a system keyboard, so this drops the on-screen keyboard column
+ * entirely and stacks search bar / filters / results vertically instead.
+ */
+@Composable
+private fun TouchSearchLayout(
+    state: SearchViewModel.SearchState,
+    viewModel: SearchViewModel,
+    currentProfile: ProfileEntity?,
+    onMovieClick: (MetaItem) -> Unit,
+    onDiscoverClick: (MetaItem) -> Unit,
+    watchedIds: Set<String>
+) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val isTopNav = currentProfile?.navPosition == "top"
+    val topPadding = if (isTopNav) 48.dp else 16.dp
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(start = 20.dp, end = 20.dp, top = topPadding)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().height(48.dp)
+        ) {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = null,
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            BasicTextField(
+                value = state.query,
+                onValueChange = { viewModel.onQueryChange(it) },
+                modifier = Modifier.weight(1f),
+                textStyle = MaterialTheme.typography.headlineSmall.copy(
+                    color = Color.White,
+                    fontWeight = FontWeight.Normal
+                ),
+                cursorBrush = SolidColor(Color.White),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                keyboardActions = KeyboardActions(
+                    onSearch = { keyboardController?.hide() }
+                ),
+                decorationBox = { innerTextField ->
+                    Box(contentAlignment = Alignment.CenterStart) {
+                        if (state.query.isEmpty()) {
+                            Text(
+                                text = "Type to search...",
+                                style = MaterialTheme.typography.headlineSmall,
+                                color = Color.White.copy(alpha = 0.5f)
+                            )
+                        }
+                        innerTextField()
+                    }
+                }
+            )
+        }
+
+        val isDiscoverActive = state.query.length < 3
+        if (isDiscoverActive && state.discoverCatalogs.isNotEmpty()) {
+            Spacer(modifier = Modifier.height(12.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                FilterDropdown(
+                    currentValue = state.selectedType.replaceFirstChar { it.uppercase() },
+                    options = state.availableTypes.map { it.replaceFirstChar { c -> c.uppercase() } },
+                    modifier = Modifier.width(140.dp),
+                    onSelect = { selected -> viewModel.selectType(selected.lowercase()) }
+                )
+                if (state.selectedCatalog != null) {
+                    FilterDropdown(
+                        currentValue = state.selectedCatalog!!.catalogName,
+                        options = state.availableCatalogs.map { it.catalogName },
+                        modifier = Modifier.width(160.dp),
+                        onSelect = { selected ->
+                            val catalog = state.availableCatalogs.find { it.catalogName == selected }
+                            if (catalog != null) viewModel.selectCatalog(catalog)
+                        }
+                    )
+                }
+                if (state.availableGenres.size > 1) {
+                    FilterDropdown(
+                        currentValue = state.selectedGenre ?: "All",
+                        options = state.availableGenres,
+                        modifier = Modifier.width(140.dp),
+                        onSelect = { viewModel.selectGenre(it) }
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
+            when {
+                state.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                }
+                state.query.length >= 3 && state.results.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No results for \"${state.query}\"", color = Color.White.copy(0.5f))
+                    }
+                }
+                state.query.length >= 3 -> {
+                    TouchResultsGrid(
+                        items = state.movies + state.series,
+                        watchedIds = watchedIds,
+                        onItemClick = onMovieClick
+                    )
+                }
+                state.discoverCatalogs.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Search for movies, series, and more", color = Color.White.copy(0.3f))
+                    }
+                }
+                state.isDiscoverLoading && state.discoverItems.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                state.discoverItems.isEmpty() -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("No content available", color = Color.White.copy(0.3f))
+                    }
+                }
+                else -> {
+                    TouchResultsGrid(
+                        items = state.discoverItems,
+                        watchedIds = watchedIds,
+                        onItemClick = onDiscoverClick,
+                        onLoadMore = { viewModel.loadMoreDiscover() }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TouchResultsGrid(
+    items: List<MetaItem>,
+    watchedIds: Set<String>,
+    onItemClick: (MetaItem) -> Unit,
+    onLoadMore: (() -> Unit)? = null
+) {
+    val gridState = rememberLazyGridState()
+    val lastVisibleIndex = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+    LaunchedEffect(lastVisibleIndex, items.size) {
+        if (onLoadMore != null && items.isNotEmpty() && lastVisibleIndex >= items.size - 12) {
+            onLoadMore()
+        }
+    }
+
+    LazyVerticalGrid(
+        columns = GridCells.Adaptive(minSize = 110.dp),
+        state = gridState,
+        contentPadding = PaddingValues(bottom = 24.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxSize()
+    ) {
+        items(items, key = { it.id }) { item ->
+            LumeraCard(
+                title = item.name,
+                posterUrl = item.poster,
+                onClick = { onItemClick(item) },
+                isWatched = item.id in watchedIds,
+                modifier = Modifier.aspectRatio(2f / 3f)
+            )
+        }
+    }
+}
+
 private const val DISCOVER_COLUMNS = 5
 private const val DISCOVER_DPAD_REPEAT_HORIZONTAL_MS = 150L
 private const val DISCOVER_DPAD_REPEAT_VERTICAL_MS = 200L
@@ -929,7 +1126,7 @@ fun KeyButton(
     Surface(
         onClick = onClick,
         interactionSource = interactionSource,
-        modifier = modifier.height(35.dp).fillMaxWidth(),
+        modifier = modifier.height(35.dp).fillMaxWidth().touchClick(onClick = onClick),
         shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(4.dp)),
         colors = ClickableSurfaceDefaults.colors(
             containerColor = Color.White.copy(0.1f),

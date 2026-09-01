@@ -18,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Arrangement
@@ -67,6 +68,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
@@ -86,6 +88,7 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -103,6 +106,7 @@ import com.hereliesaz.illumera.data.torrent.TorrentProgress
 import com.hereliesaz.illumera.ui.details.GlassSidebar
 import com.hereliesaz.illumera.ui.details.GlassSidebarScaffold
 import com.hereliesaz.illumera.ui.details.SidebarState
+import com.hereliesaz.illumera.ui.util.touchClick
 import java.text.Collator
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -633,6 +637,18 @@ fun BasePlayerScaffold(
 
                     else -> false
                 }
+            }
+            .pointerInput(showControls, panelOpen, episodeSwitchOpen, hasError) {
+                detectTapGestures(onTap = {
+                    if (hasError || panelOpen || episodeSwitchOpen) return@detectTapGestures
+                    markInteraction()
+                    if (showControls) {
+                        showControls = false
+                        showSeekOverlay = false
+                    } else {
+                        showControlsTemporarily()
+                    }
+                })
             }
     ) {
         ComposePlayerSurface(
@@ -1328,7 +1344,8 @@ private fun ControlButton(
             }
             .onFocusChanged {
                 if (it.isFocused) onFocused?.invoke()
-            },
+            }
+            .touchClick(onClick = onClick),
         colors = IconButtonDefaults.colors(
             containerColor = Color.Transparent,
             focusedContainerColor = Color.White,
@@ -1356,6 +1373,8 @@ private fun FocusableSeekBar(
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isFocused by interactionSource.collectIsFocusedAsState()
+    val latestPosition = rememberUpdatedState(currentPosition)
+    val latestDuration = rememberUpdatedState(duration)
 
     Box(
         modifier = Modifier
@@ -1370,6 +1389,17 @@ private fun FocusableSeekBar(
             }
             .onFocusChanged {
                 if (it.isFocused) onFocused()
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(onTap = { offset ->
+                    val totalDuration = latestDuration.value
+                    if (totalDuration > 0 && size.width > 0) {
+                        val ratio = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        val target = (ratio * totalDuration).toLong()
+                        onFocused()
+                        onSeekBy(target - latestPosition.value)
+                    }
+                })
             }
             .onKeyEvent { keyEvent ->
                 if (keyEvent.nativeKeyEvent.action != KeyEvent.ACTION_DOWN) {
@@ -2408,7 +2438,7 @@ private fun BoxScope.SubtitleSelectionSidePanel(
                         containerColor = Color.White.copy(alpha = 0.12f),
                         contentColor = Color.White
                     ),
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(36.dp).touchClick(onClick = onShowOffsetBar)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.VerticalAlignCenter,
@@ -2423,7 +2453,7 @@ private fun BoxScope.SubtitleSelectionSidePanel(
                         containerColor = Color.White.copy(alpha = 0.12f),
                         contentColor = Color.White
                     ),
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(36.dp).touchClick(onClick = onShowSizeBar)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.FormatSize,
@@ -2438,7 +2468,7 @@ private fun BoxScope.SubtitleSelectionSidePanel(
                         containerColor = Color.White.copy(alpha = 0.12f),
                         contentColor = Color.White
                     ),
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(36.dp).touchClick(onClick = onShowDelayBar)
                 ) {
                     Icon(
                         imageVector = Icons.Filled.Timer,
@@ -2453,7 +2483,7 @@ private fun BoxScope.SubtitleSelectionSidePanel(
                         containerColor = Color.White.copy(alpha = 0.12f),
                         contentColor = Color.White
                     ),
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(36.dp).touchClick(onClick = onShowColorBar)
                 ) {
                     Icon(
                         painter = painterResource(R.drawable.palette_icon),
@@ -3513,6 +3543,7 @@ private fun BoxScope.SubtitleOffsetTopBar(
                         up = playPauseFocus
                         down = playPauseFocus
                     }
+                .touchClick(onClick = onPlayPause)
             ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -3536,6 +3567,7 @@ private fun BoxScope.SubtitleOffsetTopBar(
                         up = decrementFocus
                         down = decrementFocus
                     }
+                .touchClick(onClick = onDecrement)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Remove,
@@ -3570,6 +3602,7 @@ private fun BoxScope.SubtitleOffsetTopBar(
                         up = incrementFocus
                         down = incrementFocus
                     }
+                .touchClick(onClick = onIncrement)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
@@ -3593,6 +3626,7 @@ private fun BoxScope.SubtitleOffsetTopBar(
                         up = closeFocus
                         down = closeFocus
                     }
+                .touchClick(onClick = onClose)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
@@ -3659,6 +3693,7 @@ private fun BoxScope.SubtitleSizeTopBar(
                         up = playPauseFocus
                         down = playPauseFocus
                     }
+                .touchClick(onClick = onPlayPause)
             ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -3682,6 +3717,7 @@ private fun BoxScope.SubtitleSizeTopBar(
                         up = decrementFocus
                         down = decrementFocus
                     }
+                .touchClick(onClick = onDecrement)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Remove,
@@ -3716,6 +3752,7 @@ private fun BoxScope.SubtitleSizeTopBar(
                         up = incrementFocus
                         down = incrementFocus
                     }
+                .touchClick(onClick = onIncrement)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
@@ -3739,6 +3776,7 @@ private fun BoxScope.SubtitleSizeTopBar(
                         up = closeFocus
                         down = closeFocus
                     }
+                .touchClick(onClick = onClose)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
@@ -3814,6 +3852,7 @@ private fun BoxScope.SubtitleDelayTopBar(
                         up = playPauseFocus
                         down = playPauseFocus
                     }
+                .touchClick(onClick = onPlayPause)
             ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -3837,6 +3876,7 @@ private fun BoxScope.SubtitleDelayTopBar(
                         up = decrementFocus
                         down = decrementFocus
                     }
+                .touchClick(onClick = onDecrement)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Remove,
@@ -3871,6 +3911,7 @@ private fun BoxScope.SubtitleDelayTopBar(
                         up = incrementFocus
                         down = incrementFocus
                     }
+                .touchClick(onClick = onIncrement)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Add,
@@ -3894,6 +3935,7 @@ private fun BoxScope.SubtitleDelayTopBar(
                         up = closeFocus
                         down = closeFocus
                     }
+                .touchClick(onClick = onClose)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Close,
@@ -3964,6 +4006,7 @@ private fun BoxScope.SubtitleColorTopBar(
                         up = playPauseFocus
                         down = playPauseFocus
                     }
+                .touchClick(onClick = onPlayPause)
             ) {
                 Icon(
                     imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
@@ -4063,6 +4106,7 @@ private fun BoxScope.SubtitleColorTopBar(
                         up = closeFocus
                         down = closeFocus
                     }
+                .touchClick(onClick = onClose)
             ) {
                 Icon(
                     imageVector = Icons.Filled.Close,

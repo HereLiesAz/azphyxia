@@ -4,7 +4,9 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -41,6 +43,8 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.text.style.TextOverflow
+import com.hereliesaz.illumera.ui.util.rememberIsTvDevice
+import com.hereliesaz.illumera.ui.util.touchClick
 
 /**
  * Top Navigation Bar for TV interface.
@@ -78,12 +82,21 @@ fun TopNavigationBar(
     val profileItem = NavDestination.Profile
     val exitItem = NavDestination.Exit
 
+    // Touch never produces a focus event, so on a touch device the D-pad "hover to
+    // reveal" affordances below (the Profile bubble, the Settings/Exit dropdown)
+    // would otherwise never appear at all — keep them permanently visible there.
+    // isTopNavActive itself stays focus-only: it also decides whether a TopNavItem
+    // shows its "currently focused" indicator or its "currently selected" one, and
+    // touch has no focus-preview concept, so it must keep using isSelected.
+    val isTv = rememberIsTvDevice()
+    val alwaysRevealForTouch = !isTv
+
     // Focus Tracking - track separately for each section
     var isSettingsAreaFocused by remember { mutableStateOf(false) }
     var isCenterAreaFocused by remember { mutableStateOf(false) }
     // Combined: navbar is active if either section has focus
     val isTopNavActive = isSettingsAreaFocused || isCenterAreaFocused
-    
+
     // BACK HANDLER: When nav is active, Back press should close it (return to content)
     androidx.activity.compose.BackHandler(enabled = isTopNavActive) {
         onEnterContent()
@@ -94,7 +107,7 @@ fun TopNavigationBar(
     var isProfileFocused by remember { mutableStateOf(false) }
     var isExitFocused by remember { mutableStateOf(false) }
     // Menu is open if Settings or any menu item is focused
-    val showSettingsMenu = isSettingsFocused || isProfileFocused || isExitFocused
+    val showSettingsMenu = isSettingsFocused || isProfileFocused || isExitFocused || alwaysRevealForTouch
 
     val backgroundColor = MaterialTheme.colorScheme.background
     val showStaticMask = currentDestination in listOf(
@@ -184,7 +197,7 @@ fun TopNavigationBar(
         ) {
             // Profile Button (Left aligned) - fades with navbar
             val profileAlpha by animateFloatAsState(
-                targetValue = if (isTopNavActive) 1f else 0f,
+                targetValue = if (isTopNavActive || alwaysRevealForTouch) 1f else 0f,
                 animationSpec = tween(200),
                 label = "profileAlpha"
             )
@@ -223,6 +236,7 @@ fun TopNavigationBar(
             Row(
                  modifier = Modifier
                     .align(Alignment.Center)
+                    .horizontalScroll(rememberScrollState())
                     .focusGroup(),
                  horizontalArrangement = Arrangement.spacedBy(8.dp),
                  verticalAlignment = Alignment.CenterVertically
@@ -452,6 +466,7 @@ fun TopNavItem(
             modifier = Modifier
                 .width(bubbleWidth)
                 .height(bubbleHeight)
+                .touchClick(onClick = onNavigate)
                 .onFocusChanged { isFocused = it.isFocused },
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(19.dp)), // Pill shape
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
@@ -564,6 +579,7 @@ fun TopNavProfileAvatar(
             onClick = onNavigate,
             modifier = Modifier
                 .fillMaxSize()
+                .touchClick(onClick = onNavigate)
                 .onFocusChanged { isFocused = it.isFocused },
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
