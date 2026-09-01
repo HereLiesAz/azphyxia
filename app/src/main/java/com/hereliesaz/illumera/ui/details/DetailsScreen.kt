@@ -89,6 +89,7 @@ import com.hereliesaz.illumera.domain.AddonSubtitle
 import com.hereliesaz.illumera.domain.episodePlaybackId
 import com.hereliesaz.illumera.domain.episodeStreamId
 import com.hereliesaz.illumera.domain.episodeDisplayTitle
+import com.hereliesaz.illumera.domain.hasAired
 import com.hereliesaz.illumera.data.model.stremio.MetaVideo
 import com.hereliesaz.illumera.data.model.stremio.Stream
 import androidx.compose.foundation.layout.PaddingValues
@@ -1468,7 +1469,12 @@ private fun findFirstEpisode(videos: List<MetaVideo>?): MetaVideo? {
 
     val numbered = videos.filter { it.season > 0 && it.episode > 0 }
     val candidates = if (numbered.isNotEmpty()) numbered else videos
-    return candidates.minWithOrNull(
+    // Prefer an already-aired episode so the default Play button doesn't
+    // target something not out yet; fall back to the full pool only if
+    // nothing has aired (e.g. a show that hasn't premiered).
+    val aired = candidates.filter { it.hasAired() }
+    val pool = if (aired.isNotEmpty()) aired else candidates
+    return pool.minWithOrNull(
         compareBy<MetaVideo>({ if (it.season > 0) it.season else Int.MAX_VALUE })
             .thenBy { if (it.episode > 0) it.episode else Int.MAX_VALUE }
             .thenBy { it.title }

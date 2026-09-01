@@ -25,6 +25,18 @@ fun episodeDisplayTitle(episode: MetaVideo): String {
     return "S${season}:E${number} - ${episode.title}"
 }
 
+/**
+ * Whether an episode's release date has passed (or is unknown, which is
+ * treated as aired — matches the existing next-up/continue-watching gates
+ * elsewhere in the app). Compares plain YYYY-MM-DD date strings lexically,
+ * against the device's local date.
+ */
+fun MetaVideo.hasAired(): Boolean {
+    val releaseDate = released?.take(10) ?: return true
+    val today = java.time.LocalDate.now().toString()
+    return releaseDate <= today
+}
+
 fun findNextEpisode(
     seriesId: String,
     currentPlaybackId: String,
@@ -53,5 +65,7 @@ fun findNextEpisode(
         }
     }
     if (currentIndex < 0 || currentIndex >= sorted.lastIndex) return null
-    return sorted[currentIndex + 1]
+    val next = sorted[currentIndex + 1]
+    // Never autoplay into an episode that hasn't been released yet.
+    return next.takeIf { it.hasAired() }
 }
