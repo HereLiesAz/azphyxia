@@ -5,14 +5,18 @@ import android.content.SharedPreferences
 import android.util.Log
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
+import com.hereliesaz.illumera.data.remote.StremioAddonDescriptor
 import com.hereliesaz.illumera.data.remote.StremioAddonEntry
+import com.hereliesaz.illumera.data.remote.StremioAddonFlags
 import com.hereliesaz.illumera.data.remote.StremioAuthError
 import com.hereliesaz.illumera.data.remote.StremioAuthService
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.security.KeyStore
@@ -232,14 +236,84 @@ class StremioAuthManager @Inject constructor(
     }
 
     /**
-     * Disconnects from Stremio by clearing stored credentials.
+     * Starts a Facebook login: returns the URL to show as a QR code / link for
+     * the user to open in a browser (their phone, typically — a TV usually has
+     * none). Call [completeFacebookLogin] with the same state afterward.
+     */
+    fun startFacebookLogin(): Pair<String, String> = stremioAuthService.startFacebookLogin()
+
+    /**
+     * Polls for Facebook login completion and, once the user finishes the
+     * OAuth flow in their browser, logs in and stores the credentials —
+     * mirroring [login] but sourced from Facebook instead of a typed password.
+     */
+    suspend fun completeFacebookLogin(state: String): Result<String> = withContext(Dispatchers.IO) {
+        try {
+            val (email, fbToken) = stremioAuthService.pollFacebookLogin(state)
+                ?: return@withContext Result.failure(StremioAuthError.NetworkError("Facebook login timed out or was not completed"))
+
+            val authKey = stremioAuthService.login(email, fbToken, facebook = true)
+
+            encryptedPrefs.edit()
+                .putString(KEY_AUTH_KEY, authKey)
+                .putString(KEY_EMAIL, email)
+                .apply()
+
+            _connectionState.value = StremioConnectionState.Connected(email)
+            Result.success(authKey)
+        } catch (e: StremioAuthError) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(StremioAuthError.UnknownError(e.message ?: "Unknown error"))
+        }
+    }
+
+    /**
+     * Pushes the given addons up to the account's addon collection, replacing
+     * it there. Fetches each addon's manifest fresh from its transport URL
+     * (rather than any locally-cached/trimmed copy) to avoid corrupting the
+     * account's collection with an incomplete manifest.
+     */
+    suspend fun pushAddonCollection(transportUrls: List<String>): Result<Unit> = withContext(Dispatchers.IO) {
+        val authKey = getStoredAuthKey()
+            ?: return@withContext Result.failure(StremioAuthError.InvalidCredentials("Not logged in"))
+
+        try {
+            val descriptors = transportUrls.mapNotNull { url ->
+                runCatching {
+                    StremioAddonDescriptor(
+                        manifest = stremioAuthService.fetchRawManifest(url),
+                        transportUrl = if (url.endsWith("manifest.json")) url else "${url.trimEnd('/')}/manifest.json",
+                        flags = StremioAddonFlags()
+                    )
+                }.getOrNull()
+            }
+            stremioAuthService.setAddonCollection(authKey, descriptors)
+            Result.success(Unit)
+        } catch (e: StremioAuthError) {
+            Result.failure(e)
+        } catch (e: Exception) {
+            Result.failure(StremioAuthError.UnknownError(e.message ?: "Unknown error"))
+        }
+    }
+
+    /**
+     * Disconnects from Stremio: invalidates the authKey server-side (best
+     * effort) and clears stored credentials.
      */
     fun disconnect() {
+        val authKey = getStoredAuthKey()
         encryptedPrefs.edit()
             .remove(KEY_AUTH_KEY)
             .remove(KEY_EMAIL)
             .apply()
 
         _connectionState.value = StremioConnectionState.Disconnected
+
+        if (authKey != null) {
+            CoroutineScope(Dispatchers.IO).launch {
+                stremioAuthService.logout(authKey)
+            }
+        }
     }
 }

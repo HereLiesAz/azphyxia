@@ -201,10 +201,15 @@ fun IntegrationsScreen(
     if (showConnectDialog) {
         ConnectStremioDialog(
             isLoading = state.isLoading,
-            onDismiss = { showConnectDialog = false },
+            facebookLoginState = state.facebookLoginState,
+            onDismiss = {
+                showConnectDialog = false
+                viewModel.resetFacebookLoginState()
+            },
             onLogin = { email, password ->
                 viewModel.login(email, password)
-            }
+            },
+            onLoginWithFacebook = { viewModel.startFacebookLogin() }
         )
     }
 
@@ -216,6 +221,14 @@ fun IntegrationsScreen(
             onSyncAddons = {
                 showManagementDialog = false
                 viewModel.syncAddons()
+            },
+            onSyncLibrary = {
+                showManagementDialog = false
+                viewModel.syncLibrary()
+            },
+            onPushAddons = {
+                showManagementDialog = false
+                viewModel.pushAddonsToStremio()
             },
             onDisconnect = {
                 showManagementDialog = false
@@ -357,14 +370,25 @@ private fun IntegrationItem(
 @Composable
 private fun ConnectStremioDialog(
     isLoading: Boolean,
+    facebookLoginState: FacebookLoginState = FacebookLoginState.Idle,
     onDismiss: () -> Unit,
-    onLogin: (email: String, password: String) -> Unit
+    onLogin: (email: String, password: String) -> Unit,
+    onLoginWithFacebook: () -> Unit = {}
 ) {
+    if (facebookLoginState is FacebookLoginState.WaitingForUser || facebookLoginState is FacebookLoginState.Error) {
+        FacebookLoginDialog(
+            state = facebookLoginState,
+            onDismiss = onDismiss,
+            onRetry = onLoginWithFacebook
+        )
+        return
+    }
+
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var serverInfo by remember { mutableStateOf<ServerInfo?>(null) }
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    
+
     val emailFocusRequester = remember { FocusRequester() }
     val serverManager = remember { com.hereliesaz.illumera.remote_input.IntegrationServerManager() }
 
@@ -480,6 +504,14 @@ private fun ConnectStremioDialog(
                                 isPrimary = true,
                                 modifier = Modifier.width(140.dp)
                             )
+
+                            IntegrationButton(
+                                text = "Login with Facebook",
+                                onClick = onLoginWithFacebook,
+                                enabled = !isLoading,
+                                isPrimary = false,
+                                modifier = Modifier.width(180.dp)
+                            )
                         }
                     }
 
@@ -562,6 +594,89 @@ private fun ConnectStremioDialog(
 }
 
 // =============================================================================
+// FACEBOOK LOGIN DIALOG (QR handoff to Stremio's own OAuth page)
+// =============================================================================
+
+@Composable
+private fun FacebookLoginDialog(
+    state: FacebookLoginState,
+    onDismiss: () -> Unit,
+    onRetry: () -> Unit
+) {
+    val url = (state as? FacebookLoginState.WaitingForUser)?.url
+    val qrBitmap = remember(url) { url?.let { generateQrCode(it) } }
+
+    Dialog(onDismissRequest = onDismiss) {
+        Box(
+            modifier = Modifier
+                .width(420.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(MaterialTheme.colorScheme.background)
+                .border(1.dp, Color.White.copy(0.1f), RoundedCornerShape(16.dp))
+                .padding(32.dp)
+        ) {
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Text(
+                    "Login with Facebook",
+                    style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold),
+                    color = Color.White
+                )
+                Spacer(Modifier.height(8.dp))
+
+                when (state) {
+                    is FacebookLoginState.WaitingForUser -> {
+                        Text(
+                            "Scan this code with your phone, sign in with Facebook, then come back — this closes automatically.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color.Gray,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        if (qrBitmap != null) {
+                            Box(
+                                modifier = Modifier
+                                    .size(180.dp)
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .background(Color.White)
+                                    .padding(8.dp)
+                            ) {
+                                Image(
+                                    bitmap = qrBitmap.asImageBitmap(),
+                                    contentDescription = "Facebook login QR code",
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            }
+                        }
+                        Spacer(Modifier.height(16.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.primary,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text("Waiting for Facebook login…", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                    }
+                    is FacebookLoginState.Error -> {
+                        Text(
+                            state.message,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = Color(0xFFEF4444),
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(Modifier.height(20.dp))
+                        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            IntegrationButton(text = "Retry", onClick = onRetry, isPrimary = true, modifier = Modifier.width(120.dp))
+                            IntegrationButton(text = "Cancel", onClick = onDismiss, modifier = Modifier.width(120.dp))
+                        }
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+}
+
+// =============================================================================
 // STREMIO MANAGEMENT DIALOG
 // =============================================================================
 
@@ -570,6 +685,8 @@ private fun StremioManagementDialog(
     email: String,
     onDismiss: () -> Unit,
     onSyncAddons: () -> Unit,
+    onSyncLibrary: () -> Unit,
+    onPushAddons: () -> Unit,
     onDisconnect: () -> Unit
 ) {
     val syncFocusRequester = remember { FocusRequester() }
@@ -611,6 +728,26 @@ private fun StremioManagementDialog(
                     subtitle = "Import addons from your Stremio account",
                     onClick = onSyncAddons,
                     focusRequester = syncFocusRequester
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                // Sync Continue Watching
+                ManagementMenuItem(
+                    icon = Icons.Default.Sync,
+                    title = "Sync Continue Watching",
+                    subtitle = "Pull and push watch progress with your Stremio library",
+                    onClick = onSyncLibrary
+                )
+
+                Spacer(Modifier.height(12.dp))
+
+                // Push addon collection back to the account
+                ManagementMenuItem(
+                    icon = Icons.Default.Cloud,
+                    title = "Push Addons to Stremio",
+                    subtitle = "Replace your account's addon collection with this device's",
+                    onClick = onPushAddons
                 )
 
                 Spacer(Modifier.height(12.dp))

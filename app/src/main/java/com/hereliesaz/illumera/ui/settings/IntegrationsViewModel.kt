@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.hereliesaz.illumera.data.auth.StremioAuthManager
 import com.hereliesaz.illumera.data.auth.StremioConnectionState
+import com.hereliesaz.illumera.data.auth.StremioLibrarySyncManager
 import com.hereliesaz.illumera.data.debrid.DebridManager
 import com.hereliesaz.illumera.data.local.AddonDao
 import com.hereliesaz.illumera.data.model.StremioAddonItem
@@ -36,10 +37,19 @@ sealed class IntegrationsEvent {
     data class DebridError(val message: String) : IntegrationsEvent()
 }
 
+/** State machine for the "Login with Facebook" flow — mirrors Trakt's DeviceAuthState. */
+sealed class FacebookLoginState {
+    object Idle : FacebookLoginState()
+    data class WaitingForUser(val url: String) : FacebookLoginState()
+    object Success : FacebookLoginState()
+    data class Error(val message: String) : FacebookLoginState()
+}
+
 data class IntegrationsUiState(
     val connectionState: StremioConnectionState = StremioConnectionState.Disconnected,
     val isLoading: Boolean = false,
     val pendingAddons: List<StremioAddonItem>? = null,
+    val facebookLoginState: FacebookLoginState = FacebookLoginState.Idle,
     val tmdbEnabled: Boolean = false,
     val tmdbLanguage: String = "",
     val traktConnected: Boolean = false,
@@ -52,6 +62,7 @@ data class IntegrationsUiState(
 @HiltViewModel
 class IntegrationsViewModel @Inject constructor(
     private val stremioAuthManager: StremioAuthManager,
+    private val stremioLibrarySyncManager: StremioLibrarySyncManager,
     private val addonRepository: AddonRepository,
     private val profileConfigurationManager: ProfileConfigurationManager,
     private val dao: AddonDao,
@@ -144,8 +155,9 @@ class IntegrationsViewModel @Inject constructor(
                 onSuccess = {
                     _uiState.value = _uiState.value.copy(isLoading = false)
                     _events.send(IntegrationsEvent.LoginSuccess)
-                    // Auto-sync addons after login
+                    // Auto-sync addons and continue-watching after login
                     syncAddons()
+                    syncLibrary()
                 },
                 onFailure = { error ->
                     _uiState.value = _uiState.value.copy(isLoading = false)
@@ -156,6 +168,66 @@ class IntegrationsViewModel @Inject constructor(
                     }
                     _events.send(IntegrationsEvent.LoginError(message))
                 }
+            )
+        }
+    }
+
+    /**
+     * Starts a "Login with Facebook" flow: shows a URL (as a QR code) the
+     * user opens in a browser to complete Facebook OAuth on Stremio's own
+     * servers, then polls for completion and logs in with the resulting
+     * one-time token.
+     */
+    fun startFacebookLogin() {
+        val (state, url) = stremioAuthManager.startFacebookLogin()
+        _uiState.value = _uiState.value.copy(facebookLoginState = FacebookLoginState.WaitingForUser(url))
+
+        viewModelScope.launch {
+            val result = stremioAuthManager.completeFacebookLogin(state)
+            result.fold(
+                onSuccess = {
+                    _uiState.value = _uiState.value.copy(facebookLoginState = FacebookLoginState.Success)
+                    _events.send(IntegrationsEvent.LoginSuccess)
+                    syncAddons()
+                    syncLibrary()
+                },
+                onFailure = { error ->
+                    val message = error.message ?: "Facebook login failed"
+                    _uiState.value = _uiState.value.copy(facebookLoginState = FacebookLoginState.Error(message))
+                }
+            )
+        }
+    }
+
+    fun resetFacebookLoginState() {
+        _uiState.value = _uiState.value.copy(facebookLoginState = FacebookLoginState.Idle)
+    }
+
+    /**
+     * Pulls/pushes Continue Watching state against the connected Stremio
+     * account. Safe to call opportunistically (e.g. after login, or manually
+     * from settings) — it diffs against remote modification times so it never
+     * re-sends unchanged items.
+     */
+    fun syncLibrary() {
+        viewModelScope.launch(Dispatchers.IO) {
+            stremioLibrarySyncManager.syncLibrary(force = true)
+        }
+    }
+
+    /**
+     * Pushes the locally-installed addon collection up to the Stremio
+     * account, replacing what's stored there.
+     */
+    fun pushAddonsToStremio() {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            val urls = addonRepository.getAddons().firstOrNull()?.map { it.transportUrl } ?: emptyList()
+            val result = stremioAuthManager.pushAddonCollection(urls)
+            _uiState.value = _uiState.value.copy(isLoading = false)
+            result.fold(
+                onSuccess = { _events.send(IntegrationsEvent.SyncComplete(urls.size)) },
+                onFailure = { error -> _events.send(IntegrationsEvent.LoginError(error.message ?: "Push failed")) }
             )
         }
     }
