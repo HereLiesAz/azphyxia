@@ -113,6 +113,7 @@ import javax.inject.Inject
 private const val DOUBLE_BACK_EXIT_WINDOW_MS = 400L
 private const val SOURCE_SELECTION_COMMIT_MIN_POSITION_MS = 5_000L
 private const val SOURCE_SELECTION_FAILURE_RESET_MAX_POSITION_MS = 1_000L
+private const val SOURCE_SELECTION_SHORT_PLAYBACK_MAX_POSITION_MS = 120_000L
 
 private data class PlayerSubtitlePayload(
     val id: String,
@@ -881,6 +882,7 @@ class MainActivity : ComponentActivity() {
             var selectedMovieLogo by rememberSaveable { mutableStateOf("") }
             var selectedAddonBaseUrl by rememberSaveable { mutableStateOf<String?>(null) }
             var detailsResumePlaybackHint by rememberSaveable { mutableStateOf<String?>(null) }
+            var reopenSourcePickerHint by rememberSaveable { mutableStateOf<String?>(null) }
             var trailerReturnToken by rememberSaveable { mutableStateOf(0) }
             var isTrailerLoading by remember { mutableStateOf(false) }
             var showTrailerError by remember { mutableStateOf(false) }
@@ -1623,6 +1625,8 @@ class MainActivity : ComponentActivity() {
                                         id = detailId,
                                         addonBaseUrl = detailAddon,
                                         resumePlaybackHint = detailResume,
+                                        reopenSourcePickerHint = reopenSourcePickerHint,
+                                        onReopenSourcePickerHintConsumed = { reopenSourcePickerHint = null },
                                         autoSelectSource = currentProfile?.autoSelectSource ?: false,
                                         rememberSourceSelection = currentProfile?.rememberSourceSelection ?: true,
                                         onPosterResolved = { selectedMoviePoster = it },
@@ -2304,6 +2308,13 @@ class MainActivity : ComponentActivity() {
                                     stopService(Intent(this@MainActivity, TorrentService::class.java))
                                     if (selectedPlaybackId.startsWith("trailer_")) {
                                         trailerReturnToken++
+                                    } else if (!sessionResult.isCompleted &&
+                                        sessionResult.positionMs < SOURCE_SELECTION_SHORT_PLAYBACK_MAX_POSITION_MS
+                                    ) {
+                                        // A very short watch usually means the source was dead or
+                                        // still caching to debrid — send the user straight back to
+                                        // the source list for this episode/movie instead of Details.
+                                        reopenSourcePickerHint = selectedPlaybackId
                                     }
                                     activeView = "details"
                                 }

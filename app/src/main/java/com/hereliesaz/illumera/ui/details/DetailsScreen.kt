@@ -120,6 +120,8 @@ fun DetailsScreen(
     id: String,
     addonBaseUrl: String? = null,
     resumePlaybackHint: String? = null,
+    reopenSourcePickerHint: String? = null,
+    onReopenSourcePickerHintConsumed: () -> Unit = {},
     autoSelectSource: Boolean = false,
     rememberSourceSelection: Boolean = true,
     onPlayClick: (String, String, String, String, String, String, Stream, List<AddonSubtitle>, List<Stream>, List<MetaVideo>) -> Unit,
@@ -161,6 +163,31 @@ fun DetailsScreen(
     val autoPlayStream = state.autoPlayStream
     val addonSubtitles = state.addonSubtitles
     val availableStreams = state.availableStreams
+
+    // A short/failed playback (see MainActivity's onBack handler) hands back the playbackId
+    // it played, asking us to reopen the source picker for that same episode/movie instead
+    // of just showing Details.
+    LaunchedEffect(showMovieContent, reopenSourcePickerHint) {
+        val hint = reopenSourcePickerHint ?: return@LaunchedEffect
+        if (!showMovieContent) return@LaunchedEffect
+        if (type == "series") {
+            if (!playbackIdBelongsToSeries(id, hint)) return@LaunchedEffect
+            val ep = resolveEpisodeForPlaybackId(movie?.id ?: id, movie?.videos, hint) ?: return@LaunchedEffect
+            val epStreamId = episodeStreamId(streamId, ep)
+            val epTitle = episodeDisplayTitle(ep)
+            pendingPlaybackId = hint
+            pendingPlaybackType = type
+            pendingPlaybackTitle = epTitle
+            viewModel.loadStreams(type, epStreamId, epTitle, sourceSelectionId = hint, forceSourcePicker = true)
+        } else {
+            if (hint != id) return@LaunchedEffect
+            pendingPlaybackId = streamId
+            pendingPlaybackType = type
+            pendingPlaybackTitle = movie?.name ?: ""
+            viewModel.loadStreams(type, streamId, movie?.name ?: "", forceSourcePicker = true)
+        }
+        onReopenSourcePickerHintConsumed()
+    }
 
     LaunchedEffect(autoPlayStream) {
         val stream = autoPlayStream ?: return@LaunchedEffect
