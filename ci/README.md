@@ -59,10 +59,14 @@ The Trakt integration (device-code login, scrobbling, sync) needs a Trakt API
 app's client ID/secret at build time. Like release signing, `app/build.gradle.kts`
 reads these from `local.properties` (`TRAKT_CLIENT_ID` / `TRAKT_CLIENT_SECRET`,
 for local dev) and falls back to environment variables for CI. Without either,
-they build in as empty strings and every Trakt request — including the device
-code request from Settings → Integrations — fails.
+they build in as empty strings and the app shows `DeviceAuthState.NotConfigured`
+(Settings → Integrations → Trakt) instead of attempting the device code request.
 
-To make CI-built releases work, register an app at
+**As of mid-2026, Trakt requires a paid Trakt VIP subscription just to register
+a developer application** (trakt.tv/oauth/applications now shows "Creating new
+apps requires Trakt VIP" and gives no free path to a client ID/secret) — this
+used to be free when this integration was originally built, and isn't
+something this repo can work around. If VIP is worth it: register an app at
 https://trakt.tv/oauth/applications (redirect URI `urn:ietf:wg:oauth:2.0:oob`)
 and add these as **Actions secrets** on the `HereLiesAz/illumera` repo:
 - `TRAKT_CLIENT_ID`
@@ -70,6 +74,16 @@ and add these as **Actions secrets** on the `HereLiesAz/illumera` repo:
 
 `.github/workflows/release.yml` picks them up automatically on the next push
 to `main`.
+
+**Free alternative** (no illumera-side credentials needed): Trakt's *watchlist,
+history, and recommendations as catalogs* — as opposed to illumera actively
+scrobbling playback to Trakt — can be pulled in for free via Stremio itself.
+Enable Trakt Scrobbling at stremio.com/acc-settings → Integrations, which
+auto-installs a personal "Trakt Integration" addon into that Stremio account's
+addon collection; then connect the Stremio account in illumera (Settings →
+Integrations → Stremio) and use "Add New Addons" to import it like any other
+addon. This does not give illumera two-way scrobbling/sync (that specifically
+requires the VIP-gated client ID above), only the catalog rows.
 
 ## Crash report relay (ACRA)
 

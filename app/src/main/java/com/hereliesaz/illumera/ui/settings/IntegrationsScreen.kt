@@ -1670,6 +1670,35 @@ private fun TraktAuthDialog(
                             }
                         }
 
+                        is DeviceAuthState.NotConfigured -> {
+                            Text(
+                                "This build has no Trakt connection configured — Trakt now requires " +
+                                    "a paid VIP subscription just to register a developer app, so this " +
+                                    "isn't something a Retry can fix.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.Red.copy(0.8f)
+                            )
+
+                            Spacer(Modifier.height(16.dp))
+
+                            Text(
+                                "Free alternative: enable Trakt Scrobbling at stremio.com/acc-settings, " +
+                                    "then connect your Stremio account here and sync addons — your Trakt " +
+                                    "watchlist, history, and recommendations will come in as catalogs.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = Color.White.copy(0.7f)
+                            )
+
+                            Spacer(Modifier.height(24.dp))
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                IntegrationButton(text = "Close", onClick = onDismiss, isPrimary = true, modifier = Modifier.width(100.dp), focusRequester = focusRequester)
+                            }
+                        }
+
                         is DeviceAuthState.Expired -> {
                             Text("The authorization code has expired. Please try again.", style = MaterialTheme.typography.bodyMedium, color = Color.White.copy(0.7f))
 
