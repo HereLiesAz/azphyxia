@@ -246,8 +246,11 @@ fun DetailsScreen(
     var restoreIndex by rememberSaveable { mutableStateOf(-1) }
     val listState = rememberLazyListState()
 
-    val tmdbPending = state.tmdbEnabled && state.tmdbLoading
-    val contentReady = showMovieContent && !tmdbPending
+    // Hero content (title, art, description, buttons) only needs the addon meta fetch —
+    // TMDB enrichment (cast, recommendations, trailer, collection) loads in the background
+    // and the rows/buttons that depend on it already render progressively as it arrives,
+    // so don't make the user wait on it before showing anything.
+    val contentReady = showMovieContent
 
     // Track whether focus is inside the hero area (any button).
     // While hero has focus, suppress vertical pivot scrolling (viewport stays fixed,
@@ -308,7 +311,7 @@ fun DetailsScreen(
         if (!contentReady) {
             com.hereliesaz.illumera.ui.components.DetailsLoadingSweep()
         }
-        if (showMovieContent && !tmdbPending) {
+        if (showMovieContent) {
             val currentMovie = requireNotNull(movie)
             val bgImage = currentMovie.background ?: currentMovie.poster
             Box(modifier = Modifier.alpha(contentAlpha)) {
