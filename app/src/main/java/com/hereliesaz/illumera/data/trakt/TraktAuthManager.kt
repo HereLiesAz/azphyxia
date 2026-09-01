@@ -27,6 +27,12 @@ sealed class DeviceAuthState {
     data object Success : DeviceAuthState()
     data class Error(val message: String) : DeviceAuthState()
     data object Expired : DeviceAuthState()
+    /** This build has no Trakt Client ID baked in (see ci/README.md — Trakt now
+     *  gates even registering a developer app behind Trakt VIP). Distinct from
+     *  [Error] so the UI can point users at the free alternative (syncing the
+     *  official Trakt catalogs via a connected Stremio account) instead of
+     *  just offering a pointless "Retry". */
+    data object NotConfigured : DeviceAuthState()
 }
 
 @Singleton
@@ -161,9 +167,7 @@ class TraktAuthManager @Inject constructor(
         deviceAuthJob = managerScope.launch {
             _authState.value = DeviceAuthState.Idle
             if (BuildConfig.TRAKT_CLIENT_ID.isBlank()) {
-                _authState.value = DeviceAuthState.Error(
-                    "Trakt is not configured for this build (missing client ID)"
-                )
+                _authState.value = DeviceAuthState.NotConfigured
                 return@launch
             }
             try {
