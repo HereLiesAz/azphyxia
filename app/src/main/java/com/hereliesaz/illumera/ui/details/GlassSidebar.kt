@@ -18,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.focus.*
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
@@ -25,8 +26,10 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.*
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
@@ -359,35 +362,95 @@ fun SourcesContent(
                 }
             }
         } else {
-            FilterDropdown(
-                currentValue = filter,
-                options = addonNames,
-                modifier = Modifier
-                    .focusProperties { up = FocusRequester.Cancel }
-                    .onPreviewKeyEvent { it.key == Key.DirectionLeft && it.type == KeyEventType.KeyDown },
-                onSelect = { filter = it }
-            )
-            Spacer(Modifier.height(16.dp))
-            LazyColumn(
-                state = listState,
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.dpadNavigation(onBack, repeatGate = repeatGate)
-            ) {
-                if (filtered.isEmpty()) item {
-                    Box(Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
-                        Text("No streams found.", color = Color.Gray, style = MaterialTheme.typography.bodyLarge)
+            Row(Modifier.fillMaxSize()) {
+                // Left column: addon source names, sideways text, stays thin
+                LazyColumn(
+                    modifier = Modifier
+                        .width(48.dp)
+                        .fillMaxHeight()
+                        .focusProperties { up = FocusRequester.Cancel }
+                        .dpadNavigation(onBack, trapLeft = true),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(addonNames, key = { it }) { name ->
+                        SourceColumnItem(
+                            name = name,
+                            isSelected = name == filter,
+                            onClick = { filter = name }
+                        )
                     }
-                } else {
-                    itemsIndexed(filtered, key = { index, s -> "${index}_${s.addonTransportUrl ?: s.url ?: index}" }) { index, s ->
-                        RawSourceItem(
-                            stream = s,
-                            isPlaying = index == selectedIndex && selectedStreamId != null,
-                            modifier = if (index == selectedIndex) Modifier.focusRequester(focusRequester) else Modifier
-                        ) { onSourceClick(s) }
+                }
+
+                Spacer(Modifier.width(16.dp))
+
+                // Right column: results for the selected source
+                LazyColumn(
+                    state = listState,
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .dpadNavigation(onBack, trapLeft = false, repeatGate = repeatGate)
+                ) {
+                    if (filtered.isEmpty()) item {
+                        Box(Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
+                            Text("No streams found.", color = Color.Gray, style = MaterialTheme.typography.bodyLarge)
+                        }
+                    } else {
+                        itemsIndexed(filtered, key = { index, s -> "${index}_${s.addonTransportUrl ?: s.url ?: index}" }) { index, s ->
+                            RawSourceItem(
+                                stream = s,
+                                isPlaying = index == selectedIndex && selectedStreamId != null,
+                                modifier = if (index == selectedIndex) Modifier.focusRequester(focusRequester) else Modifier
+                            ) { onSourceClick(s) }
+                        }
                     }
                 }
             }
         }
+    }
+}
+
+// Swaps a Text's measured width/height so it reserves vertical space while rendering sideways.
+private fun Modifier.verticalText() = this
+    .layout { measurable, constraints ->
+        val placeable = measurable.measure(Constraints())
+        layout(placeable.height, placeable.width) {
+            placeable.place(
+                x = -(placeable.width / 2 - placeable.height / 2),
+                y = -(placeable.height / 2 - placeable.width / 2)
+            )
+        }
+    }
+    .rotate(-90f)
+
+@Composable
+fun SourceColumnItem(name: String, isSelected: Boolean, modifier: Modifier = Modifier, onClick: () -> Unit) {
+    var isFocused by remember { mutableStateOf(false) }
+    val primary = MaterialTheme.colorScheme.primary
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .onFocusChanged { isFocused = it.isFocused }
+            .clip(RoundedCornerShape(6.dp))
+            .background(if (isSelected) primary.copy(alpha = 0.15f) else Color.Transparent)
+            .border(if (isFocused) 2.dp else 0.dp, if (isFocused) primary else Color.Transparent, RoundedCornerShape(6.dp))
+            .clickable(onClick = onClick)
+            .focusable()
+            .padding(vertical = 10.dp, horizontal = 4.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = name,
+            style = MaterialTheme.typography.labelMedium,
+            maxLines = 1,
+            softWrap = false,
+            color = when {
+                isSelected -> primary
+                isFocused -> Color.White
+                else -> Color.LightGray
+            },
+            modifier = Modifier.verticalText()
+        )
     }
 }
 
