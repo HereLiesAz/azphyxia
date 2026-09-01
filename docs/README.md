@@ -19,3 +19,6 @@ built internally and how to work on it safely.
   every place the mark appears in the app.
 - [**CONTRIBUTING.md**](CONTRIBUTING.md) — code style conventions and what
   to check before opening a PR.
+- [**PLAY_STORE.md**](PLAY_STORE.md) — draft Data Safety form and content
+  rating answers for a Google Play submission, plus the distribution-risk
+  tradeoffs specific to this app's torrent/debrid features.

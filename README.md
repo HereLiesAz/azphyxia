@@ -5,7 +5,8 @@ illumera is based on [Lumera](https://github.com/HereLiesAz/Lumera).
 A feature-rich Android TV streaming application built with Kotlin and Jetpack Compose for TV.
 
 Browse, discover, and stream content from Stremio-compatible addons.
-Connect your Stremio account to instantly import your existing addon collection.
+Connect your Stremio account — with email/password or Facebook — to instantly
+import your existing addon collection and sync Continue Watching progress.
 
 ![illumera](screenshots/banner.png)
 
@@ -28,7 +29,8 @@ Connect your Stremio account to instantly import your existing addon collection.
 ### Stremio Addon Ecosystem
 - Install addons via URL, QR code, or remote paste from your phone
 - Import, export, reorder, and manage your addon collection
-- Sync addons directly from your Stremio account
+- Connect a Stremio account with email/password or Facebook login (QR handoff — no typing a password on the remote)
+- Two-way sync with your Stremio account: pull your addon collection, push it back, and sync Continue Watching progress
 - Automatic catalog loading from all enabled addons
 
 ### Custom Hub Rows
@@ -132,7 +134,7 @@ configured.
 ```
 illumera/
 ├── app/                    # Main application module
-│   └── src/main/java/com/illumera/app/
+│   └── src/main/java/com/hereliesaz/illumera/
 │       ├── data/           # Room database, repositories, API services
 │       ├── di/             # Hilt dependency injection modules
 │       ├── domain/         # Domain models
