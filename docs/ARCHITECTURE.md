@@ -14,7 +14,7 @@ TV, MVVM with Hilt dependency injection, Room for local persistence.
 ## Data layer (`app/src/main/java/com/hereliesaz/illumera/data/`)
 
 **Persistence** (`data/local/`, `data/model/`): a single Room database
-(`LumeraDatabase`, currently migrated through version 43) with one DAO,
+(`LumeraDatabase`, currently migrated through version 44) with one DAO,
 `AddonDao`, that — despite the name — covers addons, catalog configs, hub
 rows/items, profiles, themes, watch history, watchlist, and series
 "next up" tracking. Entities: `AddonEntity`, `CatalogConfigEntity`,
@@ -28,7 +28,11 @@ fetch/paginate/search — see below), `IntroRepository` (IntroDB skip-segment
 data), `SubtitleRepository` (subtitle fetch/matching).
 
 **Integration services**, each in its own package under `data/`:
-`auth`/`remote` (Stremio account API), `debrid` (a `DebridManager` fronting
+`auth`/`remote` (Stremio account API — email/password or Facebook login via
+Stremio's own hosted OAuth handoff, addon-collection get/set, and two-way
+Continue Watching sync against the `datastoreMeta`/`Get`/`Put` library API;
+see `StremioAuthManager`/`StremioAuthService`/`StremioLibrarySyncManager`),
+`debrid` (a `DebridManager` fronting
 per-provider implementations: Real-Debrid, AllDebrid, Premiumize, TorBox,
 Offcloud, Debrid-Link, EasyDebrid), `tmdb` (metadata enrichment), `trakt`
 (auth, library sync, scrobbling), `torrent` (a TorrServer client),
@@ -88,7 +92,7 @@ malformed catalog entries, and applies per-request timeouts (10s catalog,
 20s stream) — all through `StremioApiService`
 (Retrofit). `ui/addons/AddonsScreen` manages install/uninstall/reorder;
 addons can be added by manifest URL, by QR-paired remote paste from a
-phone, or synced from a connected Stremio account.
+phone, or synced from a connected Stremio account (and pushed back to it).
 
 ## Auto-update
 
