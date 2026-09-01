@@ -2,6 +2,7 @@ package com.hereliesaz.illumera.ui.player
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hereliesaz.illumera.data.auth.StremioLibrarySyncManager
 import com.hereliesaz.illumera.data.local.AddonDao
 import com.hereliesaz.illumera.data.model.WatchHistoryEntity
 import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
@@ -19,6 +20,7 @@ private const val DEFAULT_WATCHED_THRESHOLD = 0.85 // matches ProfileEntity.watc
 class PlayerViewModel @Inject constructor(
     private val dao: AddonDao,
     private val traktScrobbleManager: TraktScrobbleManager,
+    private val stremioLibrarySyncManager: StremioLibrarySyncManager,
     private val profileConfigurationManager: ProfileConfigurationManager
 ) : ViewModel() {
 
@@ -62,6 +64,11 @@ class PlayerViewModel @Inject constructor(
                 scrobbled = existing?.scrobbled ?: traktScrobbleManager.isScrobbled(id)
             )
             dao.upsertHistory(entry)
+            // Opportunistic Continue Watching sync. saveProgress is called
+            // both periodically during playback and at session end, so this
+            // relies on StremioLibrarySyncManager's own internal throttle
+            // rather than rate-limiting here.
+            stremioLibrarySyncManager.syncLibrary()
         }
     }
 
@@ -71,6 +78,7 @@ class PlayerViewModel @Inject constructor(
             if (existing != null) {
                 dao.upsertHistory(existing.copy(watched = true, lastWatched = System.currentTimeMillis()))
             }
+            stremioLibrarySyncManager.syncLibrary()
         }
     }
 
