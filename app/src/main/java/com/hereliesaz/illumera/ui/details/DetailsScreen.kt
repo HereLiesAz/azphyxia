@@ -171,8 +171,8 @@ fun DetailsScreen(
         val hint = reopenSourcePickerHint ?: return@LaunchedEffect
         if (!showMovieContent) return@LaunchedEffect
         if (type == "series") {
-            if (!playbackIdBelongsToSeries(id, hint)) return@LaunchedEffect
-            val ep = resolveEpisodeForPlaybackId(movie?.id ?: id, movie?.videos, hint) ?: return@LaunchedEffect
+            if (!playbackIdBelongsToSeries(streamId, hint)) return@LaunchedEffect
+            val ep = resolveEpisodeForPlaybackId(streamId, movie?.videos, hint) ?: return@LaunchedEffect
             val epStreamId = episodeStreamId(streamId, ep)
             val epTitle = episodeDisplayTitle(ep)
             pendingPlaybackId = hint
@@ -180,7 +180,7 @@ fun DetailsScreen(
             pendingPlaybackTitle = epTitle
             viewModel.loadStreams(type, epStreamId, epTitle, sourceSelectionId = hint, forceSourcePicker = true)
         } else {
-            if (hint != id) return@LaunchedEffect
+            if (hint != streamId) return@LaunchedEffect
             pendingPlaybackId = streamId
             pendingPlaybackType = type
             pendingPlaybackTitle = movie?.name ?: ""
