@@ -22,6 +22,7 @@ import com.hereliesaz.illumera.data.tmdb.TmdbService
 import com.hereliesaz.illumera.data.tmdb.TmdbVideoInfo
 import com.hereliesaz.illumera.domain.AddonSubtitle
 import com.hereliesaz.illumera.domain.episodeStreamId
+import com.hereliesaz.illumera.domain.hasAired
 import com.hereliesaz.illumera.data.trakt.TraktSyncManager
 import dagger.hilt.android.lifecycle.HiltViewModel
 import com.hereliesaz.illumera.data.model.SeriesNextUpEntity
@@ -217,9 +218,13 @@ class DetailsViewModel @Inject constructor(
                 val prefetchId = if (resumePlaybackId != null) {
                     resumePlaybackId
                 } else if (details.type == "series") {
-                    val firstEpisode = details.videos
+                    val numbered = details.videos
                         ?.filter { it.season > 0 && it.episode > 0 }
-                        ?.minWithOrNull(compareBy<com.hereliesaz.illumera.data.model.stremio.MetaVideo> { it.season }.thenBy { it.episode })
+                        .orEmpty()
+                    val aired = numbered.filter { it.hasAired() }
+                    val pool = if (aired.isNotEmpty()) aired else numbered
+                    val firstEpisode = pool
+                        .minWithOrNull(compareBy<com.hereliesaz.illumera.data.model.stremio.MetaVideo> { it.season }.thenBy { it.episode })
                     firstEpisode?.let { episodeStreamId(streamFetchId, it) } ?: streamFetchId
                 } else {
                     streamFetchId
