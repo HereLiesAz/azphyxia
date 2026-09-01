@@ -67,8 +67,8 @@ android {
         // and the GitHub Actions run number (-PversionCodeOverride) so a published release
         // actually reports the version it was tagged as, and versionCode keeps increasing —
         // Android's package installer rejects an upgrade whose versionCode doesn't increase.
-        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toIntOrNull() ?: 11
-        versionName = (project.findProperty("versionNameOverride") as String?) ?: "0.5.0"
+        versionCode = (project.findProperty("versionCodeOverride") as String?)?.toIntOrNull() ?: 12
+        versionName = (project.findProperty("versionNameOverride") as String?) ?: "0.6.0"
 
         // GitHub repository for auto-update system
         buildConfigField("String", "GITHUB_OWNER", "\"HereLiesAz\"")
