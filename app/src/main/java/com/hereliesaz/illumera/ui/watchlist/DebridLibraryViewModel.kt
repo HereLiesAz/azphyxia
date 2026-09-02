@@ -18,7 +18,7 @@ import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 sealed class DebridLibraryEvent {
-    data class StreamResolved(val url: String, val name: String) : DebridLibraryEvent()
+    data class StreamResolved(val id: String, val url: String, val name: String) : DebridLibraryEvent()
     data class Error(val message: String) : DebridLibraryEvent()
 }
 
@@ -71,7 +71,7 @@ class DebridLibraryViewModel @Inject constructor(
             when (val result = debridManager.getStreamUrl(item)) {
                 is DebridResult.Success -> {
                     _uiState.value = _uiState.value.copy(resolvingItemId = null)
-                    _events.send(DebridLibraryEvent.StreamResolved(result.value, item.name))
+                    _events.send(DebridLibraryEvent.StreamResolved(item.id, result.value, item.name))
                 }
                 is DebridResult.Failure -> {
                     _uiState.value = _uiState.value.copy(resolvingItemId = null)

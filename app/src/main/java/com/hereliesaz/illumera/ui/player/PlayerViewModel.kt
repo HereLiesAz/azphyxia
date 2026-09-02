@@ -33,7 +33,10 @@ class PlayerViewModel @Inject constructor(
         duration: Long?
     ) {
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
-            if (id.startsWith("trailer_")) return@launch
+            // Trailers and debrid direct-plays are synthetic playback sessions with no
+            // catalog identity behind them — saving history/pushing them to a connected
+            // Stremio account's Continue Watching would just be noise there.
+            if (id.startsWith("trailer_") || id.startsWith("debrid_")) return@launch
             val safePosition = position.coerceAtLeast(0L)
             if (safePosition < 5_000L) return@launch
 

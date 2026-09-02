@@ -1,7 +1,5 @@
 package com.hereliesaz.illumera.ui.watchlist
 
-import android.content.Intent
-import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -61,6 +59,7 @@ fun WatchlistScreen(
     entryRequester: FocusRequester,
     drawerRequester: FocusRequester,
     onMovieClick: (MetaItem) -> Unit,
+    onPlayResolvedStream: (id: String, url: String, title: String) -> Unit,
     watchedIds: Set<String> = emptySet(),
     viewModel: WatchlistViewModel = hiltViewModel(),
     debridViewModel: DebridLibraryViewModel = hiltViewModel()
@@ -76,15 +75,7 @@ fun WatchlistScreen(
         debridViewModel.events.collect { event ->
             when (event) {
                 is DebridLibraryEvent.StreamResolved -> {
-                    try {
-                        val intent = Intent(Intent.ACTION_VIEW).apply {
-                            setDataAndType(Uri.parse(event.url), "video/*")
-                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                        }
-                        context.startActivity(intent)
-                    } catch (e: android.content.ActivityNotFoundException) {
-                        Toast.makeText(context, "No player found to open this stream", Toast.LENGTH_SHORT).show()
-                    }
+                    onPlayResolvedStream(event.id, event.url, event.name)
                 }
                 is DebridLibraryEvent.Error -> {
                     Toast.makeText(context, event.message, Toast.LENGTH_LONG).show()
