@@ -73,12 +73,25 @@ fun LumeraTheme(
         error = errorColor
     )
 
+    // androidx.tv.material3.Typography is a distinct class from
+    // androidx.compose.material3.Typography, so LumeraTypography can't be passed to
+    // TvMaterialTheme directly — mirror the styles it actually defines onto a TV
+    // Typography, otherwise every TV-styled screen (the majority of the app) silently
+    // falls back to the tv-material3 default type scale instead of the app's own.
+    val tvTypography = androidx.tv.material3.Typography().copy(
+        titleLarge = LumeraTypography.titleLarge,
+        titleMedium = LumeraTypography.titleMedium,
+        bodyLarge = LumeraTypography.bodyLarge,
+        labelSmall = LumeraTypography.labelSmall
+    )
+
     MobileMaterialTheme(
         colorScheme = mobileScheme,
         typography = LumeraTypography
     ) {
         TvMaterialTheme(
             colorScheme = tvScheme,
+            typography = tvTypography,
             content = content
         )
     }

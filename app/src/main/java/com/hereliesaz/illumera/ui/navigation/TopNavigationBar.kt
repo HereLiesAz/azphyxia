@@ -115,6 +115,11 @@ fun TopNavigationBar(
         NavDestination.Movies,
         NavDestination.Series
     )
+    // Brush.verticalGradient's startY/endY are raw pixels, not dp — convert so these
+    // gradients cover the same physical height regardless of screen density.
+    val gradientDensity = androidx.compose.ui.platform.LocalDensity.current
+    val staticMaskGradientEndPx = with(gradientDensity) { 180.dp.toPx() }
+    val focusedGradientEndPx = with(gradientDensity) { 400.dp.toPx() }
 
     Box(modifier = Modifier.fillMaxSize()) {
 
@@ -144,7 +149,7 @@ fun TopNavigationBar(
                                 1.0f to Color.Transparent
                             ),
                             startY = 0f,
-                            endY = 180f
+                            endY = staticMaskGradientEndPx
                         )
                     )
             )
@@ -175,7 +180,7 @@ fun TopNavigationBar(
                                 1.0f to Color.Transparent
                             ),
                             startY = 0f,
-                            endY = 400f
+                            endY = focusedGradientEndPx
                         )
                     )
             )

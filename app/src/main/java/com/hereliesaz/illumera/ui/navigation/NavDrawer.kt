@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.foundation.clickable
@@ -118,6 +119,12 @@ fun NavDrawer(
 
         // LAYER 2: Static Hero Mask
         val backgroundColor = MaterialTheme.colorScheme.background
+        // Brush.horizontalGradient's startX/endX are raw pixels, not dp — without this
+        // conversion the gradient extents below were literal pixel counts, so they'd cut
+        // off far short of their intended width on anything denser than mdpi (1x).
+        val density = LocalDensity.current
+        val maskGradientEndPx = with(density) { 350.dp.toPx() }
+        val shadowGradientEndPx = with(density) { 900.dp.toPx() }
         if (showStaticMask) {
             Box(
                 modifier = Modifier
@@ -138,7 +145,7 @@ fun NavDrawer(
                                 1.0f to Color.Transparent
                             ),
                             startX = 0f,
-                            endX = 350f
+                            endX = maskGradientEndPx
                         )
                     )
             )
@@ -168,7 +175,7 @@ fun NavDrawer(
                                 1.0f to Color.Transparent
                             ),
                             startX = 0f,
-                            endX = 900f
+                            endX = shadowGradientEndPx
                         )
                     )
             )

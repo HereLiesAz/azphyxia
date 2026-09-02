@@ -28,10 +28,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
 import com.hereliesaz.illumera.remote_input.AvatarServerManager
 import com.hereliesaz.illumera.remote_input.ServerInfo
+import com.hereliesaz.illumera.ui.util.generateQrCodeBitmap
 import com.hereliesaz.illumera.ui.util.rememberIsTvDevice
 import kotlinx.coroutines.delay
 import java.io.File
@@ -98,7 +97,7 @@ fun AvatarUploadDialog(
         
         if (info != null) {
             serverInfo = info
-            qrBitmap = generateQrCode(info.url)
+            qrBitmap = generateQrCodeBitmap(info.url)
         } else {
             error = "Could not start server. Check your network connection."
         }
@@ -260,31 +259,6 @@ private fun saveAvatarImage(context: Context, imageBytes: ByteArray): String? {
         "custom:${file.absolutePath}"
     } catch (e: Exception) {
         if (com.hereliesaz.illumera.BuildConfig.DEBUG) android.util.Log.w("AvatarUploadDialog", "Image save error", e)
-        null
-    }
-}
-
-/**
- * Generates a QR code bitmap for the given URL.
- */
-private fun generateQrCode(url: String, size: Int = 512): Bitmap? {
-    return try {
-        val writer = QRCodeWriter()
-        val bitMatrix = writer.encode(url, BarcodeFormat.QR_CODE, size, size)
-
-        val width = bitMatrix.width
-        val height = bitMatrix.height
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                bitmap.setPixel(x, y, if (bitMatrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
-            }
-        }
-
-        bitmap
-    } catch (e: Exception) {
-        if (com.hereliesaz.illumera.BuildConfig.DEBUG) android.util.Log.w("AvatarUploadDialog", "QR generation error", e)
         null
     }
 }

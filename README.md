@@ -47,7 +47,7 @@ import your existing addon collection and sync Continue Watching progress.
 - Hero carousel with auto-scrolling featured content
 - Global search across all addons
 - Continue watching with progress tracking and auto-resume
-- Drag-and-drop row reordering
+- Dashboard row/category reordering (D-pad up/down or tap ▲▼ in reorder mode)
 - Row display modes: infinite scroll, finite with a "View More" card that opens a grid, or linear
 
 ### Advanced Video Player
