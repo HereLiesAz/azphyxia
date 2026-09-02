@@ -49,8 +49,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
+import com.hereliesaz.illumera.ui.util.generateQrCodeBitmap
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -404,7 +403,7 @@ private fun ConnectStremioDialog(
         
         if (info != null) {
             serverInfo = info
-            qrBitmap = generateQrCode(info.url)
+            qrBitmap = generateQrCodeBitmap(info.url)
         }
     }
 
@@ -604,7 +603,9 @@ private fun FacebookLoginDialog(
     onRetry: () -> Unit
 ) {
     val url = (state as? FacebookLoginState.WaitingForUser)?.url
-    val qrBitmap = remember(url) { url?.let { generateQrCode(it) } }
+    val qrBitmap by produceState<Bitmap?>(initialValue = null, url) {
+        value = url?.let { generateQrCodeBitmap(it) }
+    }
 
     Dialog(onDismissRequest = onDismiss) {
         Box(
@@ -1595,8 +1596,8 @@ private fun TraktAuthDialog(
 
                             Spacer(Modifier.height(12.dp))
 
-                            val qrBitmap = remember(authState.verificationUrl) {
-                                generateQrCode(authState.verificationUrl, 200)
+                            val qrBitmap by produceState<Bitmap?>(initialValue = null, authState.verificationUrl) {
+                                value = generateQrCodeBitmap(authState.verificationUrl, 200)
                             }
                             if (qrBitmap != null) {
                                 Box(
@@ -1719,24 +1720,3 @@ private fun TraktAuthDialog(
     }
 }
 
-private fun generateQrCode(url: String, size: Int = 512): Bitmap? {
-    return try {
-        val writer = QRCodeWriter()
-        val bitMatrix = writer.encode(url, BarcodeFormat.QR_CODE, size, size)
-
-        val width = bitMatrix.width
-        val height = bitMatrix.height
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-
-        for (x in 0 until width) {
-            for (y in 0 until height) {
-                bitmap.setPixel(x, y, if (bitMatrix[x, y]) 0xFF000000.toInt() else 0xFFFFFFFF.toInt())
-            }
-        }
-
-        bitmap
-    } catch (e: Exception) {
-        if (com.hereliesaz.illumera.BuildConfig.DEBUG) android.util.Log.w("IntegrationsScreen", "QR generation error", e)
-        null
-    }
-}

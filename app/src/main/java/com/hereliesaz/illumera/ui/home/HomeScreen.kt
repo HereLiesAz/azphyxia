@@ -1253,7 +1253,10 @@ private fun PersistLazyListPosition(
 fun CinematicBackground(item: MetaItem?) {
     // Use the theme's actual background color
     val backgroundColor = androidx.compose.material3.MaterialTheme.colorScheme.background
-    
+    // Brush.horizontalGradient's endX is raw pixels, not dp — convert so this fade
+    // covers the same physical width regardless of screen density.
+    val cinematicDensity = LocalDensity.current
+
     // Only fade LEFT and BOTTOM edges - top/right are at screen edge
     val leftFade = Brush.horizontalGradient(
         colorStops = arrayOf(
@@ -1268,7 +1271,7 @@ fun CinematicBackground(item: MetaItem?) {
             1.0f to Color.Transparent
         ),
         startX = 0f,
-        endX = 500f
+        endX = with(cinematicDensity) { 500.dp.toPx() }
     )
     
     // Bottom fade: blend into the rows area

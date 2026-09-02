@@ -23,14 +23,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
-import com.google.zxing.BarcodeFormat
-import com.google.zxing.qrcode.QRCodeWriter
 import com.hereliesaz.illumera.data.model.HubRowItemEntity
 import com.hereliesaz.illumera.domain.HubShape
 import com.hereliesaz.illumera.remote_input.HubServerManager
 import com.hereliesaz.illumera.ui.addons.VoidButton
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import com.hereliesaz.illumera.ui.util.generateQrCodeBitmap
 
 /**
  * Dialog to show QR code for Bulk Image Upload.
@@ -67,23 +64,7 @@ fun HubBulkUploadDialog(
 
         // Generate QR
         if (url != null) {
-            withContext(Dispatchers.IO) {
-                try {
-                    val writer = QRCodeWriter()
-                    val bitMatrix = writer.encode(url, BarcodeFormat.QR_CODE, 512, 512)
-                    val width = bitMatrix.width
-                    val height = bitMatrix.height
-                    val bmp = Bitmap.createBitmap(width, height, Bitmap.Config.RGB_565)
-                    for (x in 0 until width) {
-                        for (y in 0 until height) {
-                            bmp.setPixel(x, y, if (bitMatrix[x, y]) android.graphics.Color.BLACK else android.graphics.Color.WHITE)
-                        }
-                    }
-                    qrBitmap = bmp
-                } catch (e: Exception) {
-                    if (com.hereliesaz.illumera.BuildConfig.DEBUG) android.util.Log.w("HubBulkUploadDialog", "QR generation error", e)
-                }
-            }
+            qrBitmap = generateQrCodeBitmap(url)
         }
     }
 

@@ -329,16 +329,21 @@ private fun DebridItemCard(
                     color = if (isFocused) accentColor else Color.White.copy(0.7f)
                 )
             }
-            Icon(
-                imageVector = Icons.Default.Delete,
-                contentDescription = "Remove from cloud storage",
-                tint = Color.White.copy(0.5f),
+            Box(
                 modifier = Modifier
-                    .size(18.dp)
+                    .size(32.dp)
                     .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
                         onDelete()
-                    }
-            )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = "Remove from cloud storage",
+                    tint = Color.White.copy(0.5f),
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
 
         Spacer(Modifier.height(8.dp))

@@ -20,9 +20,10 @@ import androidx.compose.foundation.gestures.BringIntoViewSpec
  *    "pivot point" (e.g., 10% from the left edge of the container).
  *    This creates a consistent, predictable focus position.
  *
- * 2. PREMIUM TWEEN ANIMATION:
- *    Uses tween with FastOutSlowInEasing for predictable, non-oscillating motion.
- *    This feels more premium on TV than spring animations which can oscillate.
+ * 2. SCROLL ANIMATION:
+ *    Uses a low-stiffness, non-bouncy spring (see scrollAnimationSpec below).
+ *    `stiffnessProvider` exists to let a caller vary it, but every current call
+ *    site always passes Spring.StiffnessLow — there's no dynamic switching today.
  *
  * 3. RESTORATION SKIP:
  *    When returning from details screen, skip scrolling entirely to prevent
@@ -48,8 +49,8 @@ class FocusPivotSpec(
     private val stiffnessProvider: (() -> Float)? = null
 ) : BringIntoViewSpec {
 
-    // Dynamic stiffness: StiffnessLow for single presses (premium feel),
-    // StiffnessHigh for rapid navigation (keeps up with long-press)
+    // stiffnessProvider lets a caller override the spring's stiffness; every
+    // current call site passes Spring.StiffnessLow, so this always resolves to that.
     @Deprecated("", level = DeprecationLevel.HIDDEN)
     override val scrollAnimationSpec: androidx.compose.animation.core.AnimationSpec<Float>
         get() = spring(

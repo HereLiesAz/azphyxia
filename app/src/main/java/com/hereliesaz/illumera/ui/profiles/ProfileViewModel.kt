@@ -97,12 +97,16 @@ class ProfileViewModel @Inject constructor(
     private fun finishWizard() {
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             if (editingProfileId != null) {
-                val updatedProfile = _profiles.value.find { it.id == editingProfileId }?.copy(
+                val previous = _profiles.value.find { it.id == editingProfileId }
+                val updatedProfile = previous?.copy(
                     name = tempName,
                     avatarRef = tempAvatarRef,
                     themeId = tempThemeId
                 )
                 if (updatedProfile != null) dao.updateProfile(updatedProfile)
+                if (previous != null && previous.avatarRef != tempAvatarRef) {
+                    deleteCustomAvatarFile(previous.avatarRef)
+                }
             } else {
                 val profileId = dao.insertProfile(
                     ProfileEntity(
@@ -186,12 +190,22 @@ class ProfileViewModel @Inject constructor(
     }
 
     fun deleteProfile(id: Int) {
+        val avatarRef = _profiles.value.find { it.id == id }?.avatarRef
         viewModelScope.launch(Dispatchers.IO + NonCancellable) {
             dao.deleteProfileCascading(id)
             profileConfigurationManager.deleteProfileState(id)
             debridManager.clearForProfile(id)
             traktAuthManager.clearTokensForProfile(id)
+            deleteCustomAvatarFile(avatarRef)
         }
+    }
+
+    // Custom avatars uploaded via QR (AvatarUploadDialog) are stored as "custom:<absolute
+    // path>" and otherwise live forever on disk — nothing else references or cleans them
+    // up once a profile stops pointing at them.
+    private fun deleteCustomAvatarFile(avatarRef: String?) {
+        val path = avatarRef?.removePrefix("custom:")?.takeIf { avatarRef.startsWith("custom:") } ?: return
+        runCatching { java.io.File(path).delete() }
     }
 
     fun goBackStep() {

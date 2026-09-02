@@ -343,8 +343,10 @@ fun DetailsScreen(
                                 0.85f to bg.copy(alpha = 0.08f),
                                 1.0f to Color.Transparent
                             ),
+                            // Raw pixels, not dp — convert so this covers the same physical
+                            // width regardless of screen density.
                             startX = 0f,
-                            endX = 1500f
+                            endX = with(density) { 1500.dp.toPx() }
                         )
                     )
             )
