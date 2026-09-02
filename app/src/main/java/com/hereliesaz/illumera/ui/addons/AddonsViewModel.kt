@@ -2,7 +2,10 @@ package com.hereliesaz.illumera.ui.addons
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.hereliesaz.illumera.data.debrid.DebridAddonUrlHelper
+import com.hereliesaz.illumera.data.debrid.DebridManager
 import com.hereliesaz.illumera.data.model.AddonEntity
+import com.hereliesaz.illumera.data.model.debrid.DebridProvider
 import com.hereliesaz.illumera.data.profile.ProfileConfigurationManager
 import com.hereliesaz.illumera.data.repository.AddonRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,14 +26,21 @@ sealed class AddonEvent {
 data class AddonInstallConfig(
     val url: String,
     val addonName: String,
-    val catalogCount: Int
+    val catalogCount: Int,
+    val debridKeyInjected: Boolean = false
 )
 
 @HiltViewModel
 class AddonsViewModel @Inject constructor(
     private val repository: AddonRepository,
-    private val profileConfigurationManager: ProfileConfigurationManager
+    private val profileConfigurationManager: ProfileConfigurationManager,
+    private val debridManager: DebridManager
 ) : ViewModel() {
+
+    val connectedDebridProvider: StateFlow<DebridProvider?> = debridManager.connectedProvider
+
+    /** Only for copying to the clipboard when the user asks — never stored in UI state. */
+    fun getDebridApiKeyForClipboard(): String? = debridManager.getApiKey()
 
     private suspend fun persistProfileState() {
         profileConfigurationManager.saveActiveRuntimeState()
@@ -71,7 +81,13 @@ class AddonsViewModel @Inject constructor(
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             try {
                 val trimmedUrl = url.trimEnd('/')
-                val validUrl = if (trimmedUrl.endsWith("manifest.json")) trimmedUrl else "$trimmedUrl/manifest.json"
+                val plainUrl = if (trimmedUrl.endsWith("manifest.json")) trimmedUrl else "$trimmedUrl/manifest.json"
+                val validUrl = DebridAddonUrlHelper.withDebridKeyIfKnown(
+                    plainUrl,
+                    debridManager.connectedProvider.value,
+                    debridManager.getApiKey()
+                )
+                val debridKeyInjected = validUrl != plainUrl
                 val manifest = repository.fetchManifest(validUrl)
                 val displayableCatalogs = manifest.catalogs.orEmpty().filter { catalog ->
                     val isStandardType = catalog.type == "movie" || catalog.type == "series" || catalog.type == "channel" || catalog.type == "tv"
@@ -80,7 +96,7 @@ class AddonsViewModel @Inject constructor(
                 if (displayableCatalogs.isNotEmpty()) {
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
-                        pendingInstall = AddonInstallConfig(validUrl, manifest.name, displayableCatalogs.size)
+                        pendingInstall = AddonInstallConfig(validUrl, manifest.name, displayableCatalogs.size, debridKeyInjected)
                     )
                 } else {
                     confirmInstall(validUrl, false, false, false)
