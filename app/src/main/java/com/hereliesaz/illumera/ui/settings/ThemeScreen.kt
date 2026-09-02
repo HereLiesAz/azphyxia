@@ -123,7 +123,7 @@ fun ThemeScreen(
                 label = "All Themes",
                 isSelected = selectedTab == "all",
                 isTabRowFocused = isAnyTabFocused,
-                onClick = { selectedTab = focusedTab },
+                onClick = { selectedTab = "all" },
                 modifier = Modifier
                     .width(110.dp)
                     .focusRequester(allTabReq)
@@ -136,7 +136,7 @@ fun ThemeScreen(
                 label = "Dark",
                 isSelected = selectedTab == "dark",
                 isTabRowFocused = isAnyTabFocused,
-                onClick = { selectedTab = focusedTab },
+                onClick = { selectedTab = "dark" },
                 modifier = Modifier
                     .width(80.dp)
                     .focusRequester(darkTabReq)
@@ -148,7 +148,7 @@ fun ThemeScreen(
                 label = "Colorful",
                 isSelected = selectedTab == "colorful",
                 isTabRowFocused = isAnyTabFocused,
-                onClick = { selectedTab = focusedTab },
+                onClick = { selectedTab = "colorful" },
                 modifier = Modifier
                     .width(100.dp)
                     .focusRequester(colorfulTabReq)
@@ -160,7 +160,7 @@ fun ThemeScreen(
                 label = "My Themes",
                 isSelected = selectedTab == "custom",
                 isTabRowFocused = isAnyTabFocused,
-                onClick = { selectedTab = focusedTab },
+                onClick = { selectedTab = "custom" },
                 modifier = Modifier
                     .width(110.dp)
                     .focusRequester(customTabReq)

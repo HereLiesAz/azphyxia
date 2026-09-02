@@ -105,7 +105,8 @@ fun GridViewScreen(
 ) {
     val context = LocalContext.current
     val density = LocalDensity.current
-    
+    val isTv = com.hereliesaz.illumera.ui.util.rememberIsTvDevice()
+
     val startPadding = 50.dp
     
     // Header height for pivot calculation
@@ -231,7 +232,7 @@ fun GridViewScreen(
         // ══════════════════════════════════════════════════════════════
         CompositionLocalProvider(LocalBringIntoViewSpec provides pivotSpec) {
             LazyVerticalGrid(
-                columns = GridCells.Fixed(COLUMNS),
+                columns = if (isTv) GridCells.Fixed(COLUMNS) else GridCells.Adaptive(minSize = 110.dp),
                 state = gridState,
                 contentPadding = PaddingValues(
                     start = startPadding,
