@@ -29,6 +29,7 @@ class SearchViewModel @Inject constructor(
         val movies: List<MetaItem> = emptyList(),
         val series: List<MetaItem> = emptyList(),
         val isLoading: Boolean = false,
+        val searchFailed: Boolean = false,
 
         // Discover
         val discoverCatalogs: List<DiscoverCatalog> = emptyList(),
@@ -40,7 +41,8 @@ class SearchViewModel @Inject constructor(
         val selectedGenre: String? = null,
         val discoverItems: List<MetaItem> = emptyList(),
         val isDiscoverLoading: Boolean = false,
-        val hasMoreDiscover: Boolean = true
+        val hasMoreDiscover: Boolean = true,
+        val discoverFailed: Boolean = false
     )
 
     private val _state = MutableStateFlow(SearchState())
@@ -48,6 +50,7 @@ class SearchViewModel @Inject constructor(
 
     private var searchJob: Job? = null
     private var discoverJob: Job? = null
+    private var loadMoreJob: Job? = null
     private var isLoadingMoreDiscover = false
     private var pendingDiscoverItems = mutableListOf<MetaItem>()
     private var allFetchedIds = mutableSetOf<String>()
@@ -106,7 +109,7 @@ class SearchViewModel @Inject constructor(
     }
 
     private suspend fun performSearch(query: String) {
-        _state.value = _state.value.copy(isLoading = true)
+        _state.value = _state.value.copy(isLoading = true, searchFailed = false)
         try {
             val results = repository.searchMovies(query)
             val movies = results.filter { it.type == "movie" }
@@ -116,7 +119,7 @@ class SearchViewModel @Inject constructor(
                 series = series, isLoading = false
             )
         } catch (e: Exception) {
-            _state.value = _state.value.copy(isLoading = false)
+            _state.value = _state.value.copy(isLoading = false, searchFailed = true)
         }
     }
 
@@ -180,6 +183,11 @@ class SearchViewModel @Inject constructor(
     }
 
     private fun resetDiscoverBuffer() {
+        // Cancel any load-more fetch still in flight — otherwise it can land after this
+        // reset (e.g. a genre/catalog switch mid-fetch) and splice the previous catalog's
+        // stale results onto whatever the new selection has already loaded.
+        loadMoreJob?.cancel()
+        isLoadingMoreDiscover = false
         pendingDiscoverItems.clear()
         allFetchedIds.clear()
         totalDiscoverItemsFromServer = 0
@@ -196,7 +204,7 @@ class SearchViewModel @Inject constructor(
         discoverJob?.cancel()
         discoverJob = viewModelScope.launch {
             val catalog = _state.value.selectedCatalog ?: return@launch
-            _state.value = _state.value.copy(isDiscoverLoading = true)
+            _state.value = _state.value.copy(isDiscoverLoading = true, discoverFailed = false)
 
             try {
                 val items = repository.fetchDiscoverPage(
@@ -228,7 +236,7 @@ class SearchViewModel @Inject constructor(
                     isDiscoverLoading = false
                 )
             } catch (e: Exception) {
-                _state.value = _state.value.copy(isDiscoverLoading = false)
+                _state.value = _state.value.copy(isDiscoverLoading = false, discoverFailed = true)
             }
         }
     }
@@ -260,7 +268,7 @@ class SearchViewModel @Inject constructor(
         }
 
         isLoadingMoreDiscover = true
-        viewModelScope.launch {
+        loadMoreJob = viewModelScope.launch {
             try {
                 // Skip = raw count of items the server has returned so far, not the
                 // deduped id-set size — a catalog that re-returns an item across pages
