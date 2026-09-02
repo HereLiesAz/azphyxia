@@ -286,6 +286,10 @@ fun SearchScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
+                } else if (state.results.isEmpty() && state.query.length >= 3 && state.searchFailed) {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Search failed — check your connection", color = Color.White.copy(0.5f))
+                    }
                 } else if (state.results.isEmpty() && state.query.length >= 3) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No results for \"${state.query}\"", color = Color.White.copy(0.5f))
@@ -299,6 +303,10 @@ fun SearchScreen(
                     } else if (state.isDiscoverLoading && state.discoverItems.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                    } else if (state.discoverItems.isEmpty() && state.discoverFailed) {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            Text("Couldn't load content — check your connection", color = Color.White.copy(0.3f))
                         }
                     } else if (state.discoverItems.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -669,6 +677,11 @@ private fun TouchSearchLayout(
                 state.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
+                state.query.length >= 3 && state.results.isEmpty() && state.searchFailed -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Search failed — check your connection", color = Color.White.copy(0.5f))
+                    }
+                }
                 state.query.length >= 3 && state.results.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No results for \"${state.query}\"", color = Color.White.copy(0.5f))
@@ -689,6 +702,11 @@ private fun TouchSearchLayout(
                 state.isDiscoverLoading && state.discoverItems.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                    }
+                }
+                state.discoverItems.isEmpty() && state.discoverFailed -> {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Text("Couldn't load content — check your connection", color = Color.White.copy(0.3f))
                     }
                 }
                 state.discoverItems.isEmpty() -> {

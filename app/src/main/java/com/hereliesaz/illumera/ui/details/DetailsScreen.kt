@@ -168,7 +168,11 @@ fun DetailsScreen(
     // A short/failed playback (see MainActivity's onBack handler) hands back the playbackId
     // it played, asking us to reopen the source picker for that same episode/movie instead
     // of just showing Details.
-    LaunchedEffect(showMovieContent, reopenSourcePickerHint) {
+    // Keyed on `movie` too: episode resolution below needs movie.videos, which can still be
+    // loading the first time showMovieContent flips true (hero rendering no longer waits on
+    // TMDB enrichment) — without this key, a resolution failure on that first attempt would
+    // never retry once videos arrive, leaving the hint permanently unconsumed for this screen.
+    LaunchedEffect(showMovieContent, reopenSourcePickerHint, movie) {
         val hint = reopenSourcePickerHint ?: return@LaunchedEffect
         if (!showMovieContent) return@LaunchedEffect
         if (type == "series") {

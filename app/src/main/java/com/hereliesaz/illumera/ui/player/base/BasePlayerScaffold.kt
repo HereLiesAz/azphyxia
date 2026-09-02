@@ -219,6 +219,10 @@ fun BasePlayerScaffold(
     var autoplayCancelled by remember(playbackController) { mutableStateOf(false) }
     var countdownSeconds by remember(playbackController) { mutableIntStateOf(10) }
     var countdownActive by remember(playbackController) { mutableStateOf(false) }
+    // Countdown-expiry and STATE_ENDED can both fire onAutoplayNextEpisode for the same
+    // episode transition (e.g. ended arrives the same tick the countdown hits zero) — this
+    // latch makes sure only one of them actually triggers it.
+    var autoplayFired by remember(playbackController) { mutableStateOf(false) }
 
     val isNearCompletion = remember(uiState.positionMs, uiState.durationMs, skipSegmentInfo, autoplayThresholdMode, autoplayThresholdPercent, autoplayThresholdSeconds, hasError) {
         if (hasError) return@remember false
@@ -273,6 +277,7 @@ fun BasePlayerScaffold(
         if (shouldShowNextEpisode) {
             countdownSeconds = 10
             countdownActive = true
+            autoplayFired = false
         } else {
             countdownActive = false
         }
@@ -287,14 +292,16 @@ fun BasePlayerScaffold(
             countdownSeconds--
         }
         // Countdown finished
-        if (countdownActive && !autoplayCancelled) {
+        if (countdownActive && !autoplayCancelled && !autoplayFired) {
+            autoplayFired = true
             onAutoplayNextEpisode?.invoke(currentSourceUrl)
         }
     }
 
     // Auto-trigger on STATE_ENDED if overlay is showing
     LaunchedEffect(uiState.isEnded) {
-        if (uiState.isEnded && countdownActive && !autoplayCancelled) {
+        if (uiState.isEnded && countdownActive && !autoplayCancelled && !autoplayFired) {
+            autoplayFired = true
             onAutoplayNextEpisode?.invoke(currentSourceUrl)
         }
     }
@@ -402,6 +409,15 @@ fun BasePlayerScaffold(
                 }
             }
             panelOpen -> closePanel()
+            // Checked before the generic showControls branch below: the countdown overlay's
+            // "Press back to cancel" caption promises this exact action, and controls can be
+            // visible at the same time as the countdown, so showControls must not shadow it.
+            overlayVisible -> {
+                autoplayCancelled = true
+                countdownActive = false
+                showControls = true
+                scheduleHideControls()
+            }
             showControls -> {
                 if (uiState.isEnded && nextEpisodeInfo == null) {
                     onBack()
@@ -410,12 +426,6 @@ fun BasePlayerScaffold(
                 markInteraction()
                 showControls = false
                 showSeekOverlay = false
-            }
-            overlayVisible -> {
-                autoplayCancelled = true
-                countdownActive = false
-                showControls = true
-                scheduleHideControls()
             }
             else -> onBack()
         }
@@ -687,7 +697,8 @@ fun BasePlayerScaffold(
                 primaryText = headerInfo.primaryText,
                 secondaryText = headerInfo.secondaryText,
                 durationMs = uiState.durationMs,
-                positionMs = displayPositionMs
+                positionMs = displayPositionMs,
+                isPlaying = isPlaybackIntended
             )
         }
 
@@ -973,7 +984,7 @@ fun BasePlayerScaffold(
 
         // Skip intro button
         AnimatedVisibility(
-            visible = showSkipIntro && !overlayVisible,
+            visible = showSkipIntro && !overlayVisible && !panelOpen,
             enter = fadeIn(animationSpec = tween(300)),
             exit = fadeOut(animationSpec = tween(200)),
             modifier = Modifier
@@ -992,7 +1003,7 @@ fun BasePlayerScaffold(
 
         // Next episode countdown button
         AnimatedVisibility(
-            visible = countdownActive && nextEpisodeInfo != null && !autoplayCancelled,
+            visible = countdownActive && nextEpisodeInfo != null && !autoplayCancelled && !panelOpen,
             enter = fadeIn(animationSpec = tween(300)),
             exit = fadeOut(animationSpec = tween(200)),
             modifier = Modifier
@@ -1524,7 +1535,8 @@ private fun PlayerHeader(
     primaryText: String,
     secondaryText: String?,
     durationMs: Long = 0L,
-    positionMs: Long = 0L
+    positionMs: Long = 0L,
+    isPlaying: Boolean = true
 ) {
     Column(
         horizontalAlignment = Alignment.End,
@@ -1546,7 +1558,7 @@ private fun PlayerHeader(
                 overflow = TextOverflow.Ellipsis
             )
         }
-        if (durationMs > 0L) {
+        if (durationMs > 0L && isPlaying) {
             val remainingMs = (durationMs - positionMs).coerceAtLeast(0L)
             val endTime = remember(remainingMs / 60_000) {
                 val formatter = java.text.SimpleDateFormat("h:mm a", java.util.Locale.getDefault())

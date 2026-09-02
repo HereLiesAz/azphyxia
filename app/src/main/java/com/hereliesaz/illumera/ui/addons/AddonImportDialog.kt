@@ -220,6 +220,7 @@ private fun AddonImportRow(
             .clip(RoundedCornerShape(8.dp))
             .background(bgColor)
             .border(if (isFocused && !isDisabled) 2.dp else 0.dp, borderColor, RoundedCornerShape(8.dp))
+            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
             .then(
                 if (!isDisabled) {
                     Modifier
@@ -237,7 +238,6 @@ private fun AddonImportRow(
                         .focusable(interactionSource = interactionSource)
                 } else Modifier
             )
-            .then(focusRequester?.let { Modifier.focusRequester(it) } ?: Modifier)
             .padding(12.dp)
             .alpha(alpha)
     ) {

@@ -323,13 +323,14 @@ fun SourcesContent(
         actualStreams.filter { filter == "All Addons" || (it.name?.contains(filter) == true) }
     }
 
+    // -1 (not 0) when selectedStreamId doesn't appear in this filtered subset — otherwise
+    // item 0 would wrongly get the "Playing" badge for a stream from a different filter.
     val selectedIndex = remember(filtered, selectedStreamId) {
-        if (selectedStreamId == null) 0
+        if (selectedStreamId == null) -1
         else {
-            val idx = filtered.indexOfFirst { s ->
+            filtered.indexOfFirst { s ->
                 (s.addonTransportUrl ?: s.url) == selectedStreamId
             }
-            if (idx >= 0) idx else 0
         }
     }
 

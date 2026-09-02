@@ -29,6 +29,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -301,26 +302,42 @@ private fun DebridItemCard(
             .focusable(interactionSource = interactionSource)
             .padding(12.dp)
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            if (isResolving) {
-                CircularProgressIndicator(
-                    modifier = Modifier.width(14.dp).height(14.dp),
-                    strokeWidth = 2.dp,
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (isResolving) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.width(14.dp).height(14.dp),
+                        strokeWidth = 2.dp,
+                        color = if (isFocused) accentColor else Color.White.copy(0.7f)
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        tint = if (isFocused) accentColor else Color.White.copy(0.7f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+                Spacer(Modifier.width(6.dp))
+                Text(
+                    text = if (isResolving) "Resolving..." else "Play",
+                    style = MaterialTheme.typography.labelSmall,
                     color = if (isFocused) accentColor else Color.White.copy(0.7f)
                 )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    tint = if (isFocused) accentColor else Color.White.copy(0.7f),
-                    modifier = Modifier.size(18.dp)
-                )
             }
-            Spacer(Modifier.width(6.dp))
-            Text(
-                text = if (isResolving) "Resolving..." else "Play",
-                style = MaterialTheme.typography.labelSmall,
-                color = if (isFocused) accentColor else Color.White.copy(0.7f)
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = "Remove from cloud storage",
+                tint = Color.White.copy(0.5f),
+                modifier = Modifier
+                    .size(18.dp)
+                    .clickable(indication = null, interactionSource = remember { MutableInteractionSource() }) {
+                        onDelete()
+                    }
             )
         }
 
