@@ -893,6 +893,31 @@ class MainActivity : ComponentActivity() {
             var previousView by rememberSaveable { mutableStateOf("menu") }
             val playerState = remember { PlayerState() }
 
+            // Debrid library items (Watchlist's cloud storage section) are pre-resolved
+            // file URLs with no addon Stream/catalog metadata behind them — this plays
+            // one through illumera's own player instead of the hardcoded external
+            // ACTION_VIEW intent WatchlistScreen previously used, respecting the same
+            // playerPreference (internal/ask/external) as every other playback path.
+            val onPlayResolvedStream: (id: String, url: String, title: String) -> Unit = { id, url, title ->
+                stopService(Intent(this@MainActivity, TorrentService::class.java))
+                playerState.currentEpisodeList = emptyList()
+                playerState.currentStream = Stream(url = url, title = title)
+                playerState.selectedPlayerSubtitles = emptyList()
+                playerState.selectedPlayerSources = emptyList()
+                playerState.pendingSourceSelection = null
+                selectedPlaybackId = "debrid_$id"
+                selectedPlaybackType = "movie"
+                selectedPlaybackTitle = title
+                selectedPlaybackPoster = ""
+                selectedTrailerAudioUrl = ""
+                selectedVideoUrl = url
+                when (currentProfile?.playerPreference) {
+                    "external" -> launchExternalPlayer(this@MainActivity, url)
+                    "ask" -> playerState.showPlayerChoiceDialog = true
+                    else -> activeView = "player"
+                }
+            }
+
 
             LaunchedEffect(currentProfile?.id) {
                 val profileId = currentProfile?.id
@@ -1259,7 +1284,8 @@ class MainActivity : ComponentActivity() {
                                                             selectedPlaybackPoster = movie.poster ?: ""
                                                             previousView = "menu"
                                                             activeView = "details"
-                                                        }
+                                                        },
+                                                        onPlayResolvedStream = onPlayResolvedStream
                                                     )
                                                 }
                                                 NavDestination.Settings -> {
@@ -1420,7 +1446,8 @@ class MainActivity : ComponentActivity() {
                                                             selectedPlaybackPoster = movie.poster ?: ""
                                                             previousView = "menu"
                                                             activeView = "details"
-                                                        }
+                                                        },
+                                                        onPlayResolvedStream = onPlayResolvedStream
                                                     )
                                                 }
                                                 NavDestination.Settings -> {
