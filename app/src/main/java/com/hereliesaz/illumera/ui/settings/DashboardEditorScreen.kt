@@ -8,6 +8,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import com.hereliesaz.illumera.ui.util.touchClick
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -199,7 +200,7 @@ fun DashboardEditorScreen(
                         label = "Home",
                         isSelected = selectedTab == "home",
                         isTabRowFocused = isAnyTabFocused.value,
-                        onClick = { selectedTab = focusedTab },
+                        onClick = { selectedTab = "home" },
                         modifier = Modifier
                             .width(tabButtonWidth)
                             .focusRequester(homeTabReq)
@@ -212,7 +213,7 @@ fun DashboardEditorScreen(
                         label = "Movies",
                         isSelected = selectedTab == "movies",
                         isTabRowFocused = isAnyTabFocused.value,
-                        onClick = { selectedTab = focusedTab },
+                        onClick = { selectedTab = "movies" },
                         modifier = Modifier
                             .width(tabButtonWidth)
                             .focusRequester(moviesTabReq)
@@ -224,7 +225,7 @@ fun DashboardEditorScreen(
                         label = "Series",
                         isSelected = selectedTab == "series",
                         isTabRowFocused = isAnyTabFocused.value,
-                        onClick = { selectedTab = focusedTab },
+                        onClick = { selectedTab = "series" },
                         modifier = Modifier
                             .width(tabButtonWidth)
                             .focusRequester(seriesTabReq)
@@ -1254,7 +1255,24 @@ fun VoidEditorItem(
         }
 
         if (isReordering) {
-            Text("▲▼", color = accentColor, style = MaterialTheme.typography.labelSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "▲",
+                    color = accentColor,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .touchClick(onClick = onMoveUp)
+                        .padding(8.dp)
+                )
+                Text(
+                    "▼",
+                    color = accentColor,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .touchClick(onClick = onMoveDown)
+                        .padding(8.dp)
+                )
+            }
         } else if (isFocused) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Manage", color = Color.White.copy(0.6f), style = MaterialTheme.typography.labelSmall)
@@ -1361,7 +1379,24 @@ fun VoidHubEditorItem(
         }
 
         if (isReordering) {
-            Text("▲▼", color = accentColor, style = MaterialTheme.typography.labelSmall)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "▲",
+                    color = accentColor,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .touchClick(onClick = onMoveUp)
+                        .padding(8.dp)
+                )
+                Text(
+                    "▼",
+                    color = accentColor,
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier
+                        .touchClick(onClick = onMoveDown)
+                        .padding(8.dp)
+                )
+            }
         } else if (isFocused) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Manage", color = Color.White.copy(0.6f), style = MaterialTheme.typography.labelSmall)

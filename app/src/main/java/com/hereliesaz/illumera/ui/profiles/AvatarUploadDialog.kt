@@ -2,9 +2,12 @@ package com.hereliesaz.illumera.ui.profiles
 
 import android.content.Context
 import android.graphics.Bitmap
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +32,7 @@ import com.google.zxing.BarcodeFormat
 import com.google.zxing.qrcode.QRCodeWriter
 import com.hereliesaz.illumera.remote_input.AvatarServerManager
 import com.hereliesaz.illumera.remote_input.ServerInfo
+import com.hereliesaz.illumera.ui.util.rememberIsTvDevice
 import kotlinx.coroutines.delay
 import java.io.File
 import java.io.FileOutputStream
@@ -46,12 +50,37 @@ fun AvatarUploadDialog(
     onAvatarReceived: (String) -> Unit
 ) {
     val context = LocalContext.current
+    val isTv = rememberIsTvDevice()
     var serverInfo by remember { mutableStateOf<ServerInfo?>(null) }
     var error by remember { mutableStateOf<String?>(null) }
     var qrBitmap by remember { mutableStateOf<Bitmap?>(null) }
-    
+
     val serverManager = remember { AvatarServerManager() }
     val focusRequester = remember { FocusRequester() }
+
+    // Phones/tablets already have a native photo picker — no need to make the user
+    // scan a QR code with the same device that's holding the photo.
+    val photoPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) {
+            val imageBytes = try {
+                context.contentResolver.openInputStream(uri)?.use { it.readBytes() }
+            } catch (e: Exception) {
+                if (com.hereliesaz.illumera.BuildConfig.DEBUG) {
+                    android.util.Log.w("AvatarUploadDialog", "Photo picker read error", e)
+                }
+                null
+            }
+            val avatarPath = imageBytes?.let { saveAvatarImage(context, it) }
+            if (avatarPath != null) {
+                onAvatarReceived(avatarPath)
+                onDismissRequest()
+            } else {
+                error = "Could not read the selected photo."
+            }
+        }
+    }
 
     // Start server when dialog opens
     LaunchedEffect(Unit) {
@@ -107,13 +136,44 @@ fun AvatarUploadDialog(
                 )
                 
                 Text(
-                    "Scan with your phone to upload a picture",
+                    if (isTv) "Scan with your phone to upload a picture" else "Choose a photo from this device",
                     style = MaterialTheme.typography.bodyMedium,
                     color = Color.Gray,
                     modifier = Modifier.padding(top = 8.dp)
                 )
 
                 Spacer(Modifier.height(32.dp))
+
+                if (!isTv) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(MaterialTheme.colorScheme.primary)
+                            .clickable {
+                                photoPickerLauncher.launch(
+                                    androidx.activity.result.PickVisualMediaRequest(
+                                        ActivityResultContracts.PickVisualMedia.ImageOnly
+                                    )
+                                )
+                            }
+                            .padding(vertical = 14.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "Choose Photo",
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.SemiBold),
+                            color = Color.White
+                        )
+                    }
+                    Spacer(Modifier.height(20.dp))
+                    Text(
+                        "Or scan with another device:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
 
                 when {
                     error != null -> {

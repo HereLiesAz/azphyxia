@@ -9,6 +9,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
@@ -16,6 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawWithCache
@@ -43,6 +45,7 @@ import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
 import com.hereliesaz.illumera.R
 import com.hereliesaz.illumera.data.model.stremio.MetaItem
+import com.hereliesaz.illumera.ui.util.touchClick
 import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalTvMaterial3Api::class)
@@ -147,6 +150,20 @@ fun HeroCarousel(
         }
     } else Modifier
 
+    fun goToPrevious() {
+        val newIndex = if (safeCurrentIndex > 0) safeCurrentIndex - 1 else items.lastIndex
+        currentIndex = newIndex
+        lastInteractionTime = System.currentTimeMillis()
+        onFocusChange(items[newIndex].id)
+    }
+
+    fun goToNext() {
+        val newIndex = if (safeCurrentIndex < items.lastIndex) safeCurrentIndex + 1 else 0
+        currentIndex = newIndex
+        lastInteractionTime = System.currentTimeMillis()
+        onFocusChange(items[newIndex].id)
+    }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -211,6 +228,20 @@ fun HeroCarousel(
                 } else false
             }
             .focusable(interactionSource = interactionSource)
+            .touchClick { onItemClick(items[safeCurrentIndex]) }
+            .pointerInput(items.size) {
+                var totalDrag = 0f
+                detectHorizontalDragGestures(
+                    onDragStart = { totalDrag = 0f },
+                    onHorizontalDrag = { change, dragAmount ->
+                        totalDrag += dragAmount
+                        change.consume()
+                    },
+                    onDragEnd = {
+                        if (totalDrag <= -60f) goToNext() else if (totalDrag >= 60f) goToPrevious()
+                    }
+                )
+            }
     ) {
         AnimatedContent(
             targetState = currentItem,

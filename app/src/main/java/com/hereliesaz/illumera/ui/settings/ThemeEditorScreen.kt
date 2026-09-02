@@ -6,12 +6,15 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -613,7 +616,19 @@ private fun HslSlider(
                         }
                     } else false
                 }
-                .clickable(interactionSource = interactionSource, indication = null) { }
+                .pointerInput(maxValue) {
+                    detectTapGestures { offset ->
+                        val ratio = (offset.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        onValueChange(ratio * maxValue)
+                    }
+                }
+                .pointerInput(maxValue) {
+                    detectHorizontalDragGestures { change, _ ->
+                        val ratio = (change.position.x / size.width.toFloat()).coerceIn(0f, 1f)
+                        onValueChange(ratio * maxValue)
+                        change.consume()
+                    }
+                }
                 .focusable(interactionSource = interactionSource)
         ) {
             val thumbSize = 22.dp
