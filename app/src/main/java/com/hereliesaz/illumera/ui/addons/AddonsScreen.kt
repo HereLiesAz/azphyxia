@@ -162,6 +162,32 @@ fun AddonsScreen(
             )
         }
 
+        val connectedDebridProvider by viewModel.connectedDebridProvider.collectAsState()
+        if (connectedDebridProvider != null) {
+            val clipboardManager = androidx.compose.ui.platform.LocalClipboardManager.current
+            val context = androidx.compose.ui.platform.LocalContext.current
+            Spacer(Modifier.height(12.dp))
+            Text(
+                "Copy ${connectedDebridProvider!!.displayName} key",
+                color = MaterialTheme.colorScheme.primary,
+                style = MaterialTheme.typography.labelSmall,
+                modifier = Modifier
+                    .clickable {
+                        val key = viewModel.getDebridApiKeyForClipboard()
+                        if (key != null) {
+                            clipboardManager.setText(androidx.compose.ui.text.AnnotatedString(key))
+                            android.widget.Toast.makeText(context, "Copied — paste it into this addon's config page", android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    .padding(vertical = 4.dp)
+            )
+            Text(
+                "Known addons (like Torrentio) get it added automatically on install.",
+                color = Color.White.copy(0.4f),
+                style = MaterialTheme.typography.labelSmall
+            )
+        }
+
         if (state.isLoading) {
             Spacer(Modifier.height(16.dp))
             LinearProgressIndicator(
@@ -393,6 +419,15 @@ fun AddonsScreen(
 
         VoidDialog(onDismissRequest = { viewModel.cancelInstall() }, title = "Configure Sync") {
             Text("Select which catalogs to sync:", color = Color.Gray, modifier = Modifier.padding(bottom = 16.dp))
+
+            if (item.debridKeyInjected) {
+                Text(
+                    "Your debrid key was added to this addon's URL automatically.",
+                    color = MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelSmall,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
 
             VoidToggleRow("Home Screen", home, { home = !home }, focusRequester)
             Spacer(Modifier.height(8.dp))
