@@ -45,6 +45,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import com.hereliesaz.illumera.ui.util.rememberIsTvDevice
+import com.hereliesaz.illumera.ui.util.touchClick
 
 enum class NavDestination(
     @DrawableRes val iconRes: Int,
@@ -71,16 +73,26 @@ fun NavDrawer(
     content: @Composable () -> Unit
 ) {
     var isMenuFocused by remember { mutableStateOf(false) }
+    // Touch never produces a focus event, so a touch device gets no way to trigger
+    // the D-pad "hover to expand" affordance below. Keeping the rail permanently
+    // expanded instead would push its width from 80dp to 200dp, which every screen's
+    // own content padding is sized against — so touch stays collapsed like TV at
+    // rest (see the extraItemsAlpha override below for how Settings/Exit stay reachable).
+    val isTv = rememberIsTvDevice()
+    val isExpanded = isMenuFocused
 
     val width by animateDpAsState(
-        targetValue = if (isMenuFocused) 200.dp else 80.dp,
+        targetValue = if (isExpanded) 200.dp else 80.dp,
         label = "NavWidth",
         animationSpec = tween(300)
     )
 
-    // VISIBILITY ANIMATION:
+    // VISIBILITY ANIMATION: Profile/Settings/Exit are otherwise hidden until the rail
+    // expands on D-pad focus — on touch there's no focus/hover, so keep them visible
+    // (icon-only, since isMenuExpanded/label visibility below still follows isExpanded)
+    // or they'd be permanently unreachable.
     val extraItemsAlpha by animateFloatAsState(
-        targetValue = if (isMenuFocused) 1f else 0f,
+        targetValue = if (isExpanded || !isTv) 1f else 0f,
         label = "ExtraItemsAlpha",
         animationSpec = tween(300)
     )
@@ -190,8 +202,8 @@ fun NavDrawer(
                         screen = dest,
                         customLabel = label,
                         isSelected = isSelected,
-                        isMenuExpanded = isMenuFocused,
-                        isDrawerActive = isMenuFocused,
+                        isMenuExpanded = isExpanded,
+                        isDrawerActive = isExpanded,
                         onNavigate = onNavigate,
                         modifier = Modifier
                             .focusRequester(drawerRequesters[dest]!!)
@@ -218,7 +230,7 @@ fun NavDrawer(
                     Box(modifier = Modifier.graphicsLayer { alpha = extraItemsAlpha }) {
                         ProfileAvatarItem(
                             profile = currentProfile,
-                            isMenuExpanded = isMenuFocused,
+                            isMenuExpanded = isExpanded,
                             onNavigate = { onNavigate(NavDestination.Profile) },
                             modifier = Modifier
                                 .focusRequester(drawerRequesters[NavDestination.Profile]!!)
@@ -333,6 +345,7 @@ fun SidebarItem(
             onClick = { onNavigate(screen) },
             modifier = Modifier
                 .fillMaxSize()
+                .touchClick { onNavigate(screen) }
                 .onFocusChanged { isFocused = it.isFocused },
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
@@ -453,6 +466,7 @@ fun ProfileAvatarItem(
             onClick = onNavigate,
             modifier = Modifier
                 .fillMaxSize()
+                .touchClick(onClick = onNavigate)
                 .onFocusChanged { isFocused = it.isFocused },
             shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(12.dp)),
             scale = ClickableSurfaceDefaults.scale(focusedScale = 1.0f),
