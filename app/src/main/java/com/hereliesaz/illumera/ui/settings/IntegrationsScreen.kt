@@ -642,7 +642,7 @@ private fun FacebookLoginDialog(
                                     .padding(8.dp)
                             ) {
                                 Image(
-                                    bitmap = qrBitmap.asImageBitmap(),
+                                    bitmap = qrBitmap!!.asImageBitmap(),
                                     contentDescription = "Facebook login QR code",
                                     modifier = Modifier.fillMaxSize()
                                 )
@@ -1605,7 +1605,7 @@ private fun TraktAuthDialog(
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Image(
-                                        bitmap = qrBitmap.asImageBitmap(),
+                                        bitmap = qrBitmap!!.asImageBitmap(),
                                         contentDescription = "QR Code",
                                         modifier = Modifier.size(120.dp)
                                     )
