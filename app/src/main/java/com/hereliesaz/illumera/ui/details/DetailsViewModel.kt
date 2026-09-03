@@ -45,6 +45,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+// How long a fetched stream list is served instantly (with a background refresh kicked off
+// alongside it) before a re-open of the sources sidebar has to wait on a fresh fetch again.
+private const val STREAMS_CACHE_TTL_MS = 3 * 60_000L
+
 @HiltViewModel
 class DetailsViewModel @Inject constructor(
     private val dao: AddonDao,
@@ -108,11 +112,19 @@ class DetailsViewModel @Inject constructor(
     private var loadRequestVersion: Long = 0L
     private var loadedContentKey: String? = null
 
-    // Prefetched streams cache
+    private data class StreamsCacheEntry(
+        val streams: List<Stream>,
+        val subtitles: List<AddonSubtitle>,
+        val fetchedAt: Long
+    )
+
+    // Streams cache, keyed by "$type:$id" — serves an open of the sources sidebar instantly
+    // while STREAMS_CACHE_TTL_MS is still fresh, and is always refreshed in the background
+    // whenever the sidebar is opened so the served list doesn't go stale.
+    private val streamsCache = mutableMapOf<String, StreamsCacheEntry>()
     private var prefetchStreamsJob: Job? = null
     private var prefetchedStreamKey: String? = null
-    private var prefetchedStreams: List<Stream>? = null
-    private var prefetchedSubtitles: List<AddonSubtitle>? = null
+    private var backgroundRefreshJob: Job? = null
 
 
     fun loadDetails(type: String, id: String, addonBaseUrl: String? = null) {
@@ -623,16 +635,112 @@ class DetailsViewModel @Inject constructor(
         prefetchStreamsJob?.cancel()
         val key = "$type:$id"
         prefetchedStreamKey = key
-        prefetchedStreams = null
-        prefetchedSubtitles = null
         prefetchStreamsJob = viewModelScope.launch {
             try {
                 val streamsDeferred = async { repository.getStreams(type, id) }
                 val subtitlesDeferred = async { subtitleRepository.getSubtitles(type, id) }
-                prefetchedStreams = streamsDeferred.await()
-                prefetchedSubtitles = subtitlesDeferred.await()
+                val streams = streamsDeferred.await()
+                val subtitles = subtitlesDeferred.await()
+                streamsCache[key] = StreamsCacheEntry(streams, subtitles, System.currentTimeMillis())
             } catch (_: Exception) {
                 // Prefetch failed silently — loadStreams will fetch fresh
+            }
+        }
+    }
+
+    /** Applies the active profile's sort/filter preferences to a raw stream list. */
+    private suspend fun sortStreams(rawStreams: List<Stream>): List<Stream> {
+        val activeProfileId = profileConfigurationManager.getLastActiveProfileId()
+        val profile = activeProfileId?.let { dao.getProfileById(it) }
+        return if (profile?.sourceSortingEnabled != false) {
+            val enabledQualities = StreamSortingService.parseEnabledQualities(profile?.sourceEnabledQualities ?: "4k,1080p,720p,unknown")
+            val excludePhrases = StreamSortingService.parseExcludePhrases(profile?.sourceExcludePhrases ?: "")
+            val addonSortOrders = dao.getAllAddons().firstOrNull()
+                ?.associate { it.transportUrl to it.sortOrder } ?: emptyMap()
+            val excludedFormats = StreamSortingService.parseExcludedFormats(profile?.sourceExcludedFormats ?: "")
+            streamSortingService.sortAndFilter(rawStreams, enabledQualities, excludePhrases, addonSortOrders, profile?.sourceSortPrimary ?: "quality", profile?.sourceMaxSizeGb ?: 0, excludedFormats)
+        } else rawStreams
+    }
+
+    /** Sorts a fresh (or cached) stream result and applies it to state — auto-playing a
+     *  preferred/first-playable stream when appropriate, otherwise showing the sources sidebar. */
+    private suspend fun applyResolvedStreams(
+        displayTitle: String,
+        sourceSelectionId: String,
+        forceSourcePicker: Boolean,
+        autoSelectSource: Boolean,
+        rememberSourceSelection: Boolean,
+        rawStreams: List<Stream>,
+        addonSubtitles: List<AddonSubtitle>
+    ) {
+        val streams = sortStreams(rawStreams)
+
+        val preferredStream = if (forceSourcePicker || !rememberSourceSelection) {
+            null
+        } else {
+            sourceSelectionStore.findPreferredStream(sourceSelectionId, streams)
+        }
+
+        if (preferredStream != null) {
+            _state.value = _state.value.copy(
+                isLoadingStreams = false,
+                sidebarState = SidebarState.Closed,
+                autoPlayStream = preferredStream,
+                addonSubtitles = addonSubtitles,
+                availableStreams = streams
+            )
+            return
+        }
+
+        // Auto-select first playable source when enabled
+        if (autoSelectSource && !forceSourcePicker) {
+            val firstPlayable = streams.firstOrNull {
+                !it.url.isNullOrBlank() || !it.infoHash.isNullOrBlank()
+            }
+            if (firstPlayable != null) {
+                _state.value = _state.value.copy(
+                    isLoadingStreams = false,
+                    sidebarState = SidebarState.Closed,
+                    autoPlayStream = firstPlayable,
+                    addonSubtitles = addonSubtitles,
+                    availableStreams = streams
+                )
+                return
+            }
+        }
+
+        // Update sidebar with results
+        _state.value = _state.value.copy(
+            isLoadingStreams = false,
+            autoPlayStream = null,
+            addonSubtitles = addonSubtitles,
+            availableStreams = streams,
+            sidebarState = SidebarState.Sources(displayTitle, streams)
+        )
+    }
+
+    /** Silently refetches streams and, only if the sources sidebar for this same item is
+     *  still open, updates the visible list — never touches autoPlayStream/isLoadingStreams,
+     *  since a background refresh must not yank the user away from a list they're browsing. */
+    private fun refreshStreamsInBackground(type: String, id: String, key: String, displayTitle: String) {
+        backgroundRefreshJob = viewModelScope.launch {
+            try {
+                val streamsDeferred = async { repository.getStreams(type, id) }
+                val subtitlesDeferred = async { subtitleRepository.getSubtitles(type, id) }
+                val rawStreams = streamsDeferred.await()
+                val addonSubtitles = subtitlesDeferred.await()
+                streamsCache[key] = StreamsCacheEntry(rawStreams, addonSubtitles, System.currentTimeMillis())
+
+                if (_state.value.sidebarState is SidebarState.Sources) {
+                    val streams = sortStreams(rawStreams)
+                    _state.value = _state.value.copy(
+                        addonSubtitles = addonSubtitles,
+                        availableStreams = streams,
+                        sidebarState = SidebarState.Sources(displayTitle, streams)
+                    )
+                }
+            } catch (_: Exception) {
+                // Keep showing the cached results if a silent refresh fails.
             }
         }
     }
@@ -648,6 +756,24 @@ class DetailsViewModel @Inject constructor(
         rememberSourceSelection: Boolean = true
     ) {
         loadStreamsJob?.cancel()
+        backgroundRefreshJob?.cancel()
+        val key = "$type:$id"
+        val cached = streamsCache[key]
+
+        // Serve a still-fresh cache instantly (no spinner) and refresh it in the background —
+        // sources are always updated when the list is opened, but the user only ever waits
+        // on a fetch when there's nothing recent enough to show meanwhile.
+        if (cached != null && System.currentTimeMillis() - cached.fetchedAt <= STREAMS_CACHE_TTL_MS) {
+            loadStreamsJob = viewModelScope.launch {
+                applyResolvedStreams(
+                    displayTitle, sourceSelectionId, forceSourcePicker, autoSelectSource,
+                    rememberSourceSelection, cached.streams, cached.subtitles
+                )
+            }
+            refreshStreamsInBackground(type, id, key, displayTitle)
+            return
+        }
+
         loadStreamsJob = viewModelScope.launch {
             // Show immediate loading feedback:
             // - Show sources sidebar when user needs to pick manually
@@ -667,80 +793,25 @@ class DetailsViewModel @Inject constructor(
             try {
                 val rawStreams: List<Stream>
                 val addonSubtitles: List<AddonSubtitle>
-                val prefetchKey = "$type:$id"
 
-                if (prefetchedStreamKey == prefetchKey) {
+                if (prefetchedStreamKey == key) {
                     prefetchStreamsJob?.join()
-                    if (prefetchedStreams != null) {
-                        rawStreams = prefetchedStreams!!
-                        addonSubtitles = prefetchedSubtitles ?: emptyList()
-                    } else {
-                        val streamsDeferred = async { repository.getStreams(type, id) }
-                        val subtitlesDeferred = async { subtitleRepository.getSubtitles(type, id) }
-                        rawStreams = streamsDeferred.await()
-                        addonSubtitles = subtitlesDeferred.await()
-                    }
+                }
+                val prefetched = streamsCache[key]
+                if (prefetched != null) {
+                    rawStreams = prefetched.streams
+                    addonSubtitles = prefetched.subtitles
                 } else {
                     val streamsDeferred = async { repository.getStreams(type, id) }
                     val subtitlesDeferred = async { subtitleRepository.getSubtitles(type, id) }
                     rawStreams = streamsDeferred.await()
                     addonSubtitles = subtitlesDeferred.await()
+                    streamsCache[key] = StreamsCacheEntry(rawStreams, addonSubtitles, System.currentTimeMillis())
                 }
 
-                // Read sorting preferences from the active profile
-                val activeProfileId = profileConfigurationManager.getLastActiveProfileId()
-                val profile = activeProfileId?.let { dao.getProfileById(it) }
-
-                val streams = if (profile?.sourceSortingEnabled != false) {
-                    val enabledQualities = StreamSortingService.parseEnabledQualities(profile?.sourceEnabledQualities ?: "4k,1080p,720p,unknown")
-                    val excludePhrases = StreamSortingService.parseExcludePhrases(profile?.sourceExcludePhrases ?: "")
-                    val addonSortOrders = dao.getAllAddons().firstOrNull()
-                        ?.associate { it.transportUrl to it.sortOrder } ?: emptyMap()
-                    val excludedFormats = StreamSortingService.parseExcludedFormats(profile?.sourceExcludedFormats ?: "")
-                    streamSortingService.sortAndFilter(rawStreams, enabledQualities, excludePhrases, addonSortOrders, profile?.sourceSortPrimary ?: "quality", profile?.sourceMaxSizeGb ?: 0, excludedFormats)
-                } else rawStreams
-
-                val preferredStream = if (forceSourcePicker || !rememberSourceSelection) {
-                    null
-                } else {
-                    sourceSelectionStore.findPreferredStream(sourceSelectionId, streams)
-                }
-
-                if (preferredStream != null) {
-                    _state.value = _state.value.copy(
-                        isLoadingStreams = false,
-                        sidebarState = SidebarState.Closed,
-                        autoPlayStream = preferredStream,
-                        addonSubtitles = addonSubtitles,
-                        availableStreams = streams
-                    )
-                    return@launch
-                }
-
-                // Auto-select first playable source when enabled
-                if (autoSelectSource && !forceSourcePicker) {
-                    val firstPlayable = streams.firstOrNull {
-                        !it.url.isNullOrBlank() || !it.infoHash.isNullOrBlank()
-                    }
-                    if (firstPlayable != null) {
-                        _state.value = _state.value.copy(
-                            isLoadingStreams = false,
-                            sidebarState = SidebarState.Closed,
-                            autoPlayStream = firstPlayable,
-                            addonSubtitles = addonSubtitles,
-                            availableStreams = streams
-                        )
-                        return@launch
-                    }
-                }
-
-                // Update sidebar with results
-                _state.value = _state.value.copy(
-                    isLoadingStreams = false,
-                    autoPlayStream = null,
-                    addonSubtitles = addonSubtitles,
-                    availableStreams = streams,
-                    sidebarState = SidebarState.Sources(displayTitle, streams)
+                applyResolvedStreams(
+                    displayTitle, sourceSelectionId, forceSourcePicker, autoSelectSource,
+                    rememberSourceSelection, rawStreams, addonSubtitles
                 )
             } catch (e: Exception) {
                 _state.value = _state.value.copy(
