@@ -100,3 +100,16 @@ Add these as **Actions secrets** on the `HereLiesAz/illumera` repo:
 See `../cloudflare-worker/README.md` to deploy the worker itself — it relays
 each report to a GitHub issue on this repo (deduplicated by crash signature),
 with no GitHub sign-in required on-device.
+
+## Automated PR review (Glee)
+
+`.github/workflows/glee-review.yml` runs an adversarial Claude review (the
+"glee" persona — an auditor whose job is to find failures, not admire the
+work) against every non-draft pull request, posting findings as inline PR
+comments via `anthropics/claude-code-action`.
+
+Add this as an **Actions secret** on the `HereLiesAz/illumera` repo:
+- `ANTHROPIC_API_KEY` — an Anthropic API key with access to a Claude model
+
+Without it, this workflow's job fails at the Claude step; every other CI
+job is unaffected.
