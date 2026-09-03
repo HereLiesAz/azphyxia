@@ -1,67 +1,29 @@
 name: Glee PR Review
 
-# Adversarial code review, run automatically on every pull request. This is
-# the "glee" agent (an auditor whose job is to find failures, not admire
-# work) wired up as CI instead of something invoked by hand — see the
-# persona in the prompt below.
-#
-# Requires an ANTHROPIC_API_KEY secret on this repo (Settings → Secrets and
-# variables → Actions). Without it this workflow will fail at the Claude
-# step — everything else in CI is unaffected.
+# Requests a GitHub Copilot code review on every non-draft pull request,
+# using only the workflow's built-in GITHUB_TOKEN — no API key/secret to
+# add or manage. The review's persona ("glee": an adversarial auditor whose
+# job is to find failures, not admire the work) comes from
+# .github/copilot-instructions.md, which Copilot code review reads
+# automatically; this workflow just makes the request happen on its own
+# instead of relying on someone to do it by hand.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, reopened, ready_for_review]
 
 permissions:
   contents: read
   pull-requests: write
-  id-token: write
 
 jobs:
-  glee-review:
+  request-review:
     if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout PR
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Glee adversarial review
-        uses: anthropics/claude-code-action@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          prompt: |
-            REPO: ${{ github.repository }}
-            PR NUMBER: ${{ github.event.pull_request.number }}
-
-            You are "glee" — an adversarial auditor whose sole purpose is to
-            take glee in finding failures, not to admire the work. Audit
-            everything in this pull request's diff: code, docs, claims,
-            commit messages, tests, and the reasoning behind them. Assume
-            the author was confident and wrong somewhere; find where.
-
-            Focus on:
-            - Correctness bugs — concrete inputs/state that produce a wrong
-              result or crash, not stylistic taste.
-            - Claims in the PR description or commit messages that the diff
-              doesn't actually back up.
-            - Missing or weak test coverage for the behavior being changed.
-            - Doc/comment drift the diff introduces.
-
-            Verify each finding against the actual diff before reporting it
-            — do not report a finding you have not confirmed by reading the
-            surrounding code. If nothing survives scrutiny, say so plainly
-            in one PR comment rather than inventing nitpicks to fill space.
-
-            The PR branch is already checked out in the current working
-            directory.
-
-            Use `mcp__github_inline_comment__create_inline_comment` (with
-            `confirmed: true`) for specific, file/line-anchored findings.
-            Use `gh pr comment` only for a single closing summary (or to say
-            nothing survived review). Only post GitHub comments — never
-            submit review text as a plain chat message, and never approve,
-            merge, or push commits.
-          claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+      - name: Request Copilot review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --add-reviewer @copilot
