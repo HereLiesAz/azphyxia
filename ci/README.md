@@ -100,3 +100,17 @@ Add these as **Actions secrets** on the `HereLiesAz/illumera` repo:
 See `../cloudflare-worker/README.md` to deploy the worker itself — it relays
 each report to a GitHub issue on this repo (deduplicated by crash signature),
 with no GitHub sign-in required on-device.
+
+## Automated PR review (Glee)
+
+`.github/workflows/glee-review.yml` requests a GitHub Copilot code review
+(`gh pr edit --add-reviewer @copilot`) on every non-draft pull request,
+using only the workflow's built-in `GITHUB_TOKEN` — no secrets to add or
+manage. The review's tone/focus comes from `.github/copilot-instructions.md`
+(the "glee" persona: an auditor whose job is to find failures, not admire
+the work), which Copilot code review reads automatically for every PR on
+this repo, whether requested by this workflow or manually.
+
+Actually generating a review needs GitHub Copilot enabled on this account
+(Pro/Pro+/Business/Enterprise) — without it, the reviewer request just sits
+unanswered; nothing else in CI is affected either way.

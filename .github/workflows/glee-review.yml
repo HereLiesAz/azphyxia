@@ -1,0 +1,29 @@
+name: Glee PR Review
+
+# Requests a GitHub Copilot code review on every non-draft pull request,
+# using only the workflow's built-in GITHUB_TOKEN — no API key/secret to
+# add or manage. The review's persona ("glee": an adversarial auditor whose
+# job is to find failures, not admire the work) comes from
+# .github/copilot-instructions.md, which Copilot code review reads
+# automatically; this workflow just makes the request happen on its own
+# instead of relying on someone to do it by hand.
+on:
+  pull_request:
+    types: [opened, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  request-review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request Copilot review
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr edit "${{ github.event.pull_request.number }}" \
+            --repo "${{ github.repository }}" \
+            --add-reviewer @copilot
