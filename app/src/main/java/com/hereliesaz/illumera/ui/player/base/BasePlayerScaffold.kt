@@ -213,6 +213,12 @@ fun BasePlayerScaffold(
 
     var consumeNextBackHandler by remember { mutableStateOf(false) }
 
+    // Set when the sources panel was opened by handleBackAction() reacting to a dead
+    // source, rather than by the user tapping the sources control — closing it in that
+    // case should exit to Details (the video is unplayable) instead of returning to the
+    // error overlay it was opened from.
+    var sourcesPanelOpenedFromError by remember { mutableStateOf(false) }
+
     val hasError = !uiState.errorMessage.isNullOrBlank()
 
     // --- Autoplay next episode (reset when playback controller changes, i.e. new episode) ---
@@ -369,6 +375,15 @@ fun BasePlayerScaffold(
 
     fun closePanel() {
         markInteraction()
+        if (activePanel == PlayerPanel.SOURCES && sourcesPanelOpenedFromError) {
+            // Opened in place of exiting on a dead source — closing it (by back, or by
+            // picking a source that also failed) should still land on Details, not the
+            // now-meaningless error overlay underneath.
+            sourcesPanelOpenedFromError = false
+            activePanel = PlayerPanel.NONE
+            onBack()
+            return
+        }
         activePanel = PlayerPanel.NONE
         if (showControls) {
             scheduleHideControls()
@@ -382,7 +397,19 @@ fun BasePlayerScaffold(
                 activePanel = PlayerPanel.EPISODES
                 showControls = true
             }
-            !uiState.errorMessage.isNullOrBlank() && !panelOpen -> onBack()
+            !uiState.errorMessage.isNullOrBlank() && !panelOpen -> {
+                // A dead/unavailable source: go straight to the source list instead of
+                // exiting the player. A second back (closePanel, above) exits to Details.
+                if (sources.size > 1) {
+                    markInteraction()
+                    sourcesPanelOpenedFromError = true
+                    activePanel = PlayerPanel.SOURCES
+                    showControls = true
+                    showSeekOverlay = false
+                } else {
+                    onBack()
+                }
+            }
             showSubtitleDelayBar -> {
                 markInteraction()
                 showSubtitleDelayBar = false
@@ -778,6 +805,7 @@ fun BasePlayerScaffold(
                 onSwitchSource = if (sources.size > 1) {
                     {
                         markInteraction()
+                        sourcesPanelOpenedFromError = true
                         activePanel = PlayerPanel.SOURCES
                         showControls = true
                         showSeekOverlay = false
@@ -794,6 +822,8 @@ fun BasePlayerScaffold(
             currentSourceId = uiState.currentSourceId,
             onSelectSource = { sourceId ->
                 playbackController.selectSource(sourceId)
+                // A real attempt to play the new source, not a dismissal — don't exit to Details.
+                sourcesPanelOpenedFromError = false
                 closePanel()
                 showSubtitleOffsetBar = false
                 showSubtitleSizeBar = false
