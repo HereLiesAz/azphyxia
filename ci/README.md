@@ -103,14 +103,22 @@ with no GitHub sign-in required on-device.
 
 ## Automated PR review (Glee)
 
-`.github/workflows/glee-review.yml` requests a GitHub Copilot code review
-(`gh pr edit --add-reviewer @copilot`) on every non-draft pull request,
-using only the workflow's built-in `GITHUB_TOKEN` — no secrets to add or
-manage. The review's tone/focus comes from `.github/copilot-instructions.md`
-(the "glee" persona: an auditor whose job is to find failures, not admire
-the work), which Copilot code review reads automatically for every PR on
-this repo, whether requested by this workflow or manually.
+Two independent workflows run the same adversarial "glee" review (an
+auditor whose job is to find failures, not admire the work) on every
+non-draft pull request, each through a different model:
 
-Actually generating a review needs GitHub Copilot enabled on this account
-(Pro/Pro+/Business/Enterprise) — without it, the reviewer request just sits
-unanswered; nothing else in CI is affected either way.
+- `.github/workflows/glee-review.yml` — Claude, via
+  `anthropics/claude-code-action`. Add this as an **Actions secret**:
+  - `ANTHROPIC_API_KEY` — an Anthropic API key with access to a Claude model
+- `.github/workflows/glee-review-antigravity.yml` — Google's Antigravity
+  SDK, via the community `rsamborski/run-agy-sdk` action (pinned to a
+  commit, not `@main` — see the comment in that workflow for why). Add this
+  as an **Actions secret**:
+  - `ANTIGRAVITY_API_KEY` — a Gemini/Antigravity API key from Google AI Studio
+
+Either workflow's job simply fails at the review step if its secret is
+missing; the other workflow (and the rest of CI) is unaffected.
+
+`.github/copilot-instructions.md` also carries the glee persona for GitHub's
+own built-in Copilot code review — useful if that's ever requested on a PR
+(manually, or via a repo Ruleset), but nothing here auto-requests it.
