@@ -334,12 +334,16 @@ fun SourcesContent(
         }
     }
 
+    // Where initial D-pad focus lands — always a real index (falls back to 0) so the list
+    // is navigable even when nothing is "Playing" yet, unlike selectedIndex above.
+    val focusIndex = if (selectedIndex >= 0) selectedIndex else 0
+
     val listState = rememberLazyListState()
     val repeatGate = remember { DpadRepeatGate(verticalRepeatIntervalMs = 200L) }
 
-    LaunchedEffect(selectedIndex, filtered) {
-        if (filtered.isNotEmpty() && selectedIndex > 0) {
-            runCatching { listState.scrollToItem(selectedIndex) }
+    LaunchedEffect(focusIndex, filtered) {
+        if (filtered.isNotEmpty() && focusIndex > 0) {
+            runCatching { listState.scrollToItem(focusIndex) }
         }
     }
 
@@ -401,7 +405,7 @@ fun SourcesContent(
                             RawSourceItem(
                                 stream = s,
                                 isPlaying = index == selectedIndex && selectedStreamId != null,
-                                modifier = if (index == selectedIndex) Modifier.focusRequester(focusRequester) else Modifier
+                                modifier = if (index == focusIndex) Modifier.focusRequester(focusRequester) else Modifier
                             ) { onSourceClick(s) }
                         }
                     }
