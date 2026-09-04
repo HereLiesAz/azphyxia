@@ -1,8 +1,6 @@
 package com.hereliesaz.illumera.ui.search
 
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -15,19 +13,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.BringIntoViewSpec
-import androidx.compose.foundation.gestures.LocalBringIntoViewSpec
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.grid.itemsIndexed
 import androidx.compose.foundation.lazy.grid.rememberLazyGridState
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Backspace
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SpaceBar
@@ -42,7 +38,6 @@ import androidx.compose.ui.focus.focusProperties
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -66,12 +61,9 @@ import com.hereliesaz.illumera.data.model.stremio.MetaItem
 import com.hereliesaz.illumera.data.model.ProfileEntity
 import com.hereliesaz.illumera.ui.components.LumeraBackground
 import com.hereliesaz.illumera.ui.components.LumeraCard
-import com.hereliesaz.illumera.ui.details.FilterDropdown
-import com.hereliesaz.illumera.ui.home.DpadRepeatGate
 import com.hereliesaz.illumera.ui.home.ViewMoreCard
 import com.hereliesaz.illumera.ui.util.rememberIsTvDevice
 import com.hereliesaz.illumera.ui.util.touchClick
-import com.hereliesaz.illumera.ui.utils.ImagePrefetcher
 import kotlinx.coroutines.delay
 
 private const val PREVIEW_COUNT = 3
@@ -91,10 +83,8 @@ fun SearchScreen(
     moviesViewMoreRequester: FocusRequester = remember { FocusRequester() },
     seriesViewMoreRequester: FocusRequester = remember { FocusRequester() },
     resultsRequester: FocusRequester = remember { FocusRequester() },
-    discoverRequester: FocusRequester = remember { FocusRequester() },
     lastFocusedId: String? = null,
     onFocusedIdChange: (String?) -> Unit = {},
-    onDiscoverClick: (MetaItem) -> Unit = onMovieClick,
     watchedIds: Set<String> = emptySet()
 ) {
     val state by viewModel.state.collectAsState()
@@ -102,7 +92,7 @@ fun SearchScreen(
 
     // Internal Requesters
     val searchInputFocusRequester = remember { FocusRequester() }
-    val discoverGridEntryRequester = remember { FocusRequester() }
+    val recentSearchesEntryRequester = remember { FocusRequester() }
 
     // Track if we're actively using system keyboard
     var keepFocused by remember { mutableStateOf(false) }
@@ -114,9 +104,6 @@ fun SearchScreen(
     // takes ~200ms. Until focus is established, keep BackHandler enabled so a quick
     // second back press doesn't exit the app. Resets on each fresh composition.
     var focusEverSet by remember { mutableStateOf(false) }
-
-    // Hoisted so it survives DiscoverGrid being removed/re-added when query toggles around 3 chars
-    var discoverFocusRestored by remember { mutableStateOf(false) }
 
     // BACK: Go to Drawer
     BackHandler(enabled = !isTopNav || isContentFocused || !focusEverSet) {
@@ -150,7 +137,6 @@ fun SearchScreen(
                 viewModel = viewModel,
                 currentProfile = currentProfile,
                 onMovieClick = onMovieClick,
-                onDiscoverClick = onDiscoverClick,
                 watchedIds = watchedIds
             )
             return@LumeraBackground
@@ -191,84 +177,11 @@ fun SearchScreen(
                     entryRequester = entryRequester,
                     drawerRequester = drawerRequester,
                     isTopNav = isTopNav,
-                    hasResults = state.results.isNotEmpty() || state.discoverItems.isNotEmpty(),
-                    contentEntryRequester = if (state.query.length < 3 && state.discoverItems.isNotEmpty()) {
-                        discoverGridEntryRequester
+                    hasResults = state.results.isNotEmpty() || state.recentSearches.isNotEmpty(),
+                    contentEntryRequester = if (state.query.isEmpty() && state.recentSearches.isNotEmpty()) {
+                        recentSearchesEntryRequester
                     } else null
                 )
-
-                // DISCOVER FILTERS — greyed out with fade when searching
-                if (state.discoverCatalogs.isNotEmpty()) {
-                    val isDiscoverActive = state.query.length < 3
-                    val filterAlpha by animateFloatAsState(
-                        targetValue = if (isDiscoverActive) 1f else 0.3f,
-                        animationSpec = tween(durationMillis = 300),
-                        label = "discover_filter_alpha"
-                    )
-                    val filterGap = if (isTopNav) 4.dp else 8.dp
-                    val filterRightInterceptor = if (isDiscoverActive) {
-                        Modifier.onPreviewKeyEvent { event ->
-                            if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionRight
-                                && state.discoverItems.isNotEmpty()
-                            ) {
-                                discoverGridEntryRequester.requestFocus()
-                                true
-                            } else false
-                        }
-                    } else Modifier
-
-                    Spacer(modifier = Modifier.height(if (isTopNav) 8.dp else 16.dp))
-
-                    Column(
-                        modifier = Modifier
-                            .graphicsLayer { alpha = filterAlpha }
-                            .focusProperties { canFocus = isDiscoverActive }
-                    ) {
-                        Text(
-                            text = "Discover",
-                            style = TvMaterialTheme.typography.titleMedium.copy(
-                                fontWeight = FontWeight.SemiBold
-                            ),
-                            color = Color.White.copy(0.9f),
-                            modifier = Modifier.padding(bottom = filterGap)
-                        )
-
-                        // Type dropdown
-                        FilterDropdown(
-                            currentValue = state.selectedType.replaceFirstChar { it.uppercase() },
-                            options = state.availableTypes.map { it.replaceFirstChar { c -> c.uppercase() } },
-                            modifier = Modifier.fillMaxWidth().then(filterRightInterceptor),
-                            onSelect = { selected ->
-                                viewModel.selectType(selected.lowercase())
-                            }
-                        )
-                        Spacer(modifier = Modifier.height(filterGap))
-
-                        // Catalog dropdown
-                        if (state.selectedCatalog != null) {
-                            FilterDropdown(
-                                currentValue = state.selectedCatalog!!.catalogName,
-                                options = state.availableCatalogs.map { it.catalogName },
-                                modifier = Modifier.fillMaxWidth().then(filterRightInterceptor),
-                                onSelect = { selected ->
-                                    val catalog = state.availableCatalogs.find { it.catalogName == selected }
-                                    if (catalog != null) viewModel.selectCatalog(catalog)
-                                }
-                            )
-                            Spacer(modifier = Modifier.height(filterGap))
-                        }
-
-                        // Genre dropdown (only if genres exist)
-                        if (state.availableGenres.size > 1) {
-                            FilterDropdown(
-                                currentValue = state.selectedGenre ?: "All",
-                                options = state.availableGenres,
-                                modifier = Modifier.fillMaxWidth().then(filterRightInterceptor),
-                                onSelect = { viewModel.selectGenre(it) }
-                            )
-                        }
-                    }
-                }
             }
 
             // --- RIGHT PANE: RESULTS ---
@@ -286,55 +199,27 @@ fun SearchScreen(
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                     }
-                } else if (state.results.isEmpty() && state.query.length >= 3 && state.searchFailed) {
+                } else if (state.results.isEmpty() && state.query.isNotEmpty() && state.searchFailed) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Search failed — check your connection", color = Color.White.copy(0.5f))
                     }
-                } else if (state.results.isEmpty() && state.query.length >= 3) {
+                } else if (state.results.isEmpty() && state.query.isNotEmpty()) {
                     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No results for \"${state.query}\"", color = Color.White.copy(0.5f))
                     }
-                } else if (state.query.length < 3) {
-                    // DISCOVER MODE
-                    if (state.discoverCatalogs.isEmpty()) {
+                } else if (state.query.isEmpty()) {
+                    if (state.recentSearches.isEmpty()) {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Text("Search for movies, series, and more", color = Color.White.copy(0.3f))
                         }
-                    } else if (state.isDiscoverLoading && state.discoverItems.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                        }
-                    } else if (state.discoverItems.isEmpty() && state.discoverFailed) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("Couldn't load content — check your connection", color = Color.White.copy(0.3f))
-                        }
-                    } else if (state.discoverItems.isEmpty()) {
-                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No content available", color = Color.White.copy(0.3f))
-                        }
                     } else {
-                        DiscoverGrid(
-                            items = state.discoverItems,
-                            onItemClick = { item ->
-                                onFocusedIdChange(item.id)
-                                onDiscoverClick(item)
-                            },
-                            onLoadMore = { viewModel.loadMoreDiscover() },
-                            discoverRequester = discoverRequester,
-                            lastFocusedId = lastFocusedId,
-                            onFocusedIdChange = onFocusedIdChange,
+                        RecentSearchesList(
+                            queries = state.recentSearches,
+                            onSelect = { viewModel.selectRecentSearch(it) },
+                            entryRequester = recentSearchesEntryRequester,
                             keyboardRequester = entryRequester,
-                            gridEntryRequester = discoverGridEntryRequester,
                             headerHeight = searchBarHeight,
-                            initialScrollIndex = viewModel.discoverScrollIndex,
-                            initialScrollOffset = viewModel.discoverScrollOffset,
-                            onScrollPositionChange = { index, offset ->
-                                viewModel.updateDiscoverScrollPosition(index, offset)
-                            },
-                            focusRestored = discoverFocusRestored,
-                            onFocusRestored = { discoverFocusRestored = true },
-                            modifier = Modifier.fillMaxSize(),
-                            watchedIds = watchedIds
+                            modifier = Modifier.fillMaxSize()
                         )
                     }
                 } else {
@@ -576,7 +461,7 @@ fun SearchScreen(
  * Touch layout for phones/tablets. The TV layout's fixed 240dp keyboard column plus its
  * paddings only fits on TV-sized canvases — on a phone it leaves no room for results. Touch
  * devices already have a system keyboard, so this drops the on-screen keyboard column
- * entirely and stacks search bar / filters / results vertically instead.
+ * entirely and stacks search bar / results vertically instead.
  */
 @Composable
 private fun TouchSearchLayout(
@@ -584,7 +469,6 @@ private fun TouchSearchLayout(
     viewModel: SearchViewModel,
     currentProfile: ProfileEntity?,
     onMovieClick: (MetaItem) -> Unit,
-    onDiscoverClick: (MetaItem) -> Unit,
     watchedIds: Set<String>
 ) {
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -635,41 +519,6 @@ private fun TouchSearchLayout(
             )
         }
 
-        val isDiscoverActive = state.query.length < 3
-        if (isDiscoverActive && state.discoverCatalogs.isNotEmpty()) {
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                FilterDropdown(
-                    currentValue = state.selectedType.replaceFirstChar { it.uppercase() },
-                    options = state.availableTypes.map { it.replaceFirstChar { c -> c.uppercase() } },
-                    modifier = Modifier.width(140.dp),
-                    onSelect = { selected -> viewModel.selectType(selected.lowercase()) }
-                )
-                if (state.selectedCatalog != null) {
-                    FilterDropdown(
-                        currentValue = state.selectedCatalog!!.catalogName,
-                        options = state.availableCatalogs.map { it.catalogName },
-                        modifier = Modifier.width(160.dp),
-                        onSelect = { selected ->
-                            val catalog = state.availableCatalogs.find { it.catalogName == selected }
-                            if (catalog != null) viewModel.selectCatalog(catalog)
-                        }
-                    )
-                }
-                if (state.availableGenres.size > 1) {
-                    FilterDropdown(
-                        currentValue = state.selectedGenre ?: "All",
-                        options = state.availableGenres,
-                        modifier = Modifier.width(140.dp),
-                        onSelect = { viewModel.selectGenre(it) }
-                    )
-                }
-            }
-        }
-
         Spacer(modifier = Modifier.height(16.dp))
 
         Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
@@ -677,49 +526,33 @@ private fun TouchSearchLayout(
                 state.isLoading -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
-                state.query.length >= 3 && state.results.isEmpty() && state.searchFailed -> {
+                state.query.isNotEmpty() && state.results.isEmpty() && state.searchFailed -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Search failed — check your connection", color = Color.White.copy(0.5f))
                     }
                 }
-                state.query.length >= 3 && state.results.isEmpty() -> {
+                state.query.isNotEmpty() && state.results.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("No results for \"${state.query}\"", color = Color.White.copy(0.5f))
                     }
                 }
-                state.query.length >= 3 -> {
+                state.query.isNotEmpty() -> {
                     TouchResultsGrid(
                         items = state.movies + state.series,
                         watchedIds = watchedIds,
                         onItemClick = onMovieClick
                     )
                 }
-                state.discoverCatalogs.isEmpty() -> {
+                state.recentSearches.isEmpty() -> {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                         Text("Search for movies, series, and more", color = Color.White.copy(0.3f))
                     }
                 }
-                state.isDiscoverLoading && state.discoverItems.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                    }
-                }
-                state.discoverItems.isEmpty() && state.discoverFailed -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("Couldn't load content — check your connection", color = Color.White.copy(0.3f))
-                    }
-                }
-                state.discoverItems.isEmpty() -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Text("No content available", color = Color.White.copy(0.3f))
-                    }
-                }
                 else -> {
-                    TouchResultsGrid(
-                        items = state.discoverItems,
-                        watchedIds = watchedIds,
-                        onItemClick = onDiscoverClick,
-                        onLoadMore = { viewModel.loadMoreDiscover() }
+                    RecentSearchesList(
+                        queries = state.recentSearches,
+                        onSelect = { viewModel.selectRecentSearch(it) },
+                        modifier = Modifier.fillMaxSize()
                     )
                 }
             }
@@ -762,231 +595,86 @@ private fun TouchResultsGrid(
     }
 }
 
-private const val DISCOVER_COLUMNS = 5
-private const val DISCOVER_DPAD_REPEAT_HORIZONTAL_MS = 150L
-private const val DISCOVER_DPAD_REPEAT_VERTICAL_MS = 200L
+@Composable
+private fun RecentSearchesList(
+    queries: List<String>,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    headerHeight: Dp = 0.dp,
+    entryRequester: FocusRequester? = null,
+    keyboardRequester: FocusRequester? = null
+) {
+    LazyColumn(
+        modifier = modifier,
+        contentPadding = PaddingValues(top = headerHeight + 16.dp, bottom = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        item {
+            Text(
+                text = "Recent Searches",
+                style = TvMaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = Color.White.copy(0.9f),
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
+        itemsIndexed(queries, key = { _, query -> query }) { index, query ->
+            val leftInterceptor = if (keyboardRequester != null) {
+                Modifier.onPreviewKeyEvent { event ->
+                    if (event.type == KeyEventType.KeyDown && event.key == Key.DirectionLeft) {
+                        keyboardRequester.requestFocus()
+                        true
+                    } else false
+                }
+            } else Modifier
 
-private class DiscoverPivotSpec(
-    private val pivotOffset: Float
-) : BringIntoViewSpec {
-
-    @Deprecated("", level = DeprecationLevel.HIDDEN)
-    override val scrollAnimationSpec: androidx.compose.animation.core.AnimationSpec<Float>
-        get() = androidx.compose.animation.core.spring(
-            stiffness = androidx.compose.animation.core.Spring.StiffnessLow,
-            dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-            visibilityThreshold = 0.1f
-        )
-
-    override fun calculateScrollDistance(offset: Float, size: Float, containerSize: Float): Float {
-        val targetPosition = pivotOffset
-        val currentPosition = offset
-        return currentPosition - targetPosition
+            RecentSearchRow(
+                query = query,
+                onClick = { onSelect(query) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(leftInterceptor)
+                    .then(if (index == 0 && entryRequester != null) Modifier.focusRequester(entryRequester) else Modifier)
+            )
+        }
     }
 }
 
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
-private fun DiscoverGrid(
-    items: List<MetaItem>,
-    onItemClick: (MetaItem) -> Unit,
-    onLoadMore: () -> Unit,
-    discoverRequester: FocusRequester,
-    lastFocusedId: String?,
-    onFocusedIdChange: (String?) -> Unit,
-    keyboardRequester: FocusRequester,
-    gridEntryRequester: FocusRequester,
-    headerHeight: Dp = 48.dp,
-    initialScrollIndex: Int = 0,
-    initialScrollOffset: Int = 0,
-    onScrollPositionChange: (Int, Int) -> Unit = { _, _ -> },
-    focusRestored: Boolean = false,
-    onFocusRestored: () -> Unit = {},
-    modifier: Modifier = Modifier,
-    watchedIds: Set<String> = emptySet()
+private fun RecentSearchRow(
+    query: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-    val density = LocalDensity.current
+    val interactionSource = remember { MutableInteractionSource() }
+    val isFocused by interactionSource.collectIsFocusedAsState()
 
-    val dpadRepeatGate = remember {
-        DpadRepeatGate(
-            horizontalRepeatIntervalMs = DISCOVER_DPAD_REPEAT_HORIZONTAL_MS,
-            verticalRepeatIntervalMs = DISCOVER_DPAD_REPEAT_VERTICAL_MS
+    Surface(
+        onClick = onClick,
+        interactionSource = interactionSource,
+        modifier = modifier.touchClick(onClick = onClick),
+        shape = ClickableSurfaceDefaults.shape(RoundedCornerShape(8.dp)),
+        colors = ClickableSurfaceDefaults.colors(
+            containerColor = Color.White.copy(0.05f),
+            focusedContainerColor = Color.White.copy(0.15f)
         )
-    }
-
-    // Pivot spec: items scroll to just below the header
-    val headerHeightPx = with(density) { headerHeight.toPx() }
-    val pivotSpec = remember(headerHeightPx) { DiscoverPivotSpec(pivotOffset = headerHeightPx + 16f) }
-
-    // Compute restore index from lastFocusedId so the grid starts at the right position
-    val restoreIndex = if (lastFocusedId != null) {
-        items.indexOfFirst { it.id == lastFocusedId }.let { if (it >= 0) it else initialScrollIndex }
-    } else initialScrollIndex
-    val restoreOffset = if (lastFocusedId != null && restoreIndex != initialScrollIndex) 0 else initialScrollOffset
-
-    val gridState = rememberLazyGridState(
-        initialFirstVisibleItemIndex = restoreIndex,
-        initialFirstVisibleItemScrollOffset = restoreOffset
-    )
-    val cardRequesters = remember { mutableMapOf<Int, FocusRequester>() }
-    var pendingDirectionalTargetIndex by remember { mutableStateOf<Int?>(null) }
-
-    // Persist scroll position back to ViewModel
-    LaunchedEffect(gridState) {
-        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
-            .collect { (index, offset) -> onScrollPositionChange(index, offset) }
-    }
-
-    // First fully visible item in first column — entry target from keyboard/filters
-    // Items partially scrolled behind the header have negative offset.y, so skip those
-    val firstVisibleFirstColIndex by remember {
-        derivedStateOf {
-            gridState.layoutInfo.visibleItemsInfo
-                .firstOrNull { it.index % DISCOVER_COLUMNS == 0 && it.offset.y >= 0 }
-                ?.index ?: 0
-        }
-    }
-
-    // Prefetch image URLs
-    val imageUrls = remember(items) { items.map { it.poster } }
-
-    // Pagination trigger
-    val lastVisibleIndex = gridState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-    LaunchedEffect(lastVisibleIndex, items.size) {
-        if (items.isNotEmpty() && lastVisibleIndex >= items.size - 12) {
-            onLoadMore()
-        }
-    }
-
-    // Focus restoration — only when returning from details (lastFocusedId is set)
-    LaunchedEffect(lastFocusedId, gridState.layoutInfo.totalItemsCount) {
-        if (!focusRestored && lastFocusedId != null && gridState.layoutInfo.totalItemsCount > 0) {
-            kotlinx.coroutines.delay(16)
-            discoverRequester.requestFocus()
-            onFocusRestored()
-        }
-    }
-
-    // Pending directional target correction
-    LaunchedEffect(gridState) {
-        snapshotFlow { pendingDirectionalTargetIndex to gridState.layoutInfo.visibleItemsInfo.map { it.index } }
-            .collect { (pendingTarget, visibleIndexes) ->
-                if (pendingTarget != null && visibleIndexes.contains(pendingTarget)) {
-                    cardRequesters[pendingTarget]?.requestFocus()
-                }
-            }
-    }
-
-    CompositionLocalProvider(LocalBringIntoViewSpec provides pivotSpec) {
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(DISCOVER_COLUMNS),
-            state = gridState,
-            contentPadding = PaddingValues(top = headerHeight + 8.dp, bottom = 78.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp),
-            modifier = modifier
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp)
         ) {
-            itemsIndexed(
-                items = items,
-                key = { index, item -> "${item.id}_$index" }
-            ) { index, item ->
-                val isRestoreTarget = if (lastFocusedId != null) {
-                    item.id == lastFocusedId
-                } else {
-                    index == 0
-                }
-
-                val itemRequester = remember(index) { FocusRequester() }
-                val effectiveRequester = if (isRestoreTarget) discoverRequester else itemRequester
-
-                DisposableEffect(index, effectiveRequester) {
-                    cardRequesters[index] = effectiveRequester
-                    onDispose {
-                        if (cardRequesters[index] === effectiveRequester) {
-                            cardRequesters.remove(index)
-                        }
-                    }
-                }
-
-                val isGridEntry = index == firstVisibleFirstColIndex
-
-                LumeraCard(
-                    title = item.name,
-                    posterUrl = item.poster,
-                    onClick = { onItemClick(item) },
-                    isWatched = item.id in watchedIds,
-                    modifier = Modifier
-                        .aspectRatio(2f / 3f)
-                        .onPreviewKeyEvent { keyEvent ->
-                            if (dpadRepeatGate.shouldConsume(keyEvent)) return@onPreviewKeyEvent true
-                            if (keyEvent.type == KeyEventType.KeyDown) {
-                                when (keyEvent.key) {
-                                    Key.DirectionUp -> {
-                                        if (index < DISCOVER_COLUMNS) {
-                                            // First row: block — stay on current item
-                                            pendingDirectionalTargetIndex = null
-                                            return@onPreviewKeyEvent true
-                                        }
-                                        val targetIndex = index - DISCOVER_COLUMNS
-                                        val targetRequester = cardRequesters[targetIndex]
-                                        if (targetRequester != null) {
-                                            pendingDirectionalTargetIndex = null
-                                            targetRequester.requestFocus()
-                                            return@onPreviewKeyEvent true
-                                        } else {
-                                            pendingDirectionalTargetIndex = targetIndex
-                                            return@onPreviewKeyEvent false
-                                        }
-                                    }
-                                    Key.DirectionDown -> {
-                                        val targetIndex = index + DISCOVER_COLUMNS
-                                        if (targetIndex >= items.size) {
-                                            pendingDirectionalTargetIndex = null
-                                            return@onPreviewKeyEvent true
-                                        }
-                                        val targetRequester = cardRequesters[targetIndex]
-                                        if (targetRequester != null) {
-                                            pendingDirectionalTargetIndex = null
-                                            targetRequester.requestFocus()
-                                            return@onPreviewKeyEvent true
-                                        } else {
-                                            pendingDirectionalTargetIndex = targetIndex
-                                            return@onPreviewKeyEvent false
-                                        }
-                                    }
-                                    Key.DirectionLeft -> {
-                                        pendingDirectionalTargetIndex = null
-                                        if (index % DISCOVER_COLUMNS == 0) {
-                                            keyboardRequester.requestFocus()
-                                            return@onPreviewKeyEvent true
-                                        }
-                                    }
-                                    Key.DirectionRight -> {
-                                        pendingDirectionalTargetIndex = null
-                                    }
-                                }
-                            }
-                            false
-                        }
-                        .onFocusChanged {
-                            if (it.isFocused) {
-                                ImagePrefetcher.prefetchAround(context, imageUrls, index, count = 12)
-                                onFocusedIdChange(item.id)
-                                val pendingTarget = pendingDirectionalTargetIndex
-                                if (pendingTarget != null) {
-                                    if (index == pendingTarget) {
-                                        pendingDirectionalTargetIndex = null
-                                    } else {
-                                        cardRequesters[pendingTarget]?.requestFocus()
-                                    }
-                                }
-                            }
-                        }
-                        .focusRequester(effectiveRequester)
-                        .then(if (isGridEntry) Modifier.focusRequester(gridEntryRequester) else Modifier)
-                )
-            }
+            Icon(
+                Icons.Default.History,
+                contentDescription = null,
+                tint = Color.White.copy(if (isFocused) 0.8f else 0.5f),
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            Text(
+                text = query,
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (isFocused) Color.White else Color.White.copy(0.8f)
+            )
         }
     }
 }

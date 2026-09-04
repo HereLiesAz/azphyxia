@@ -61,7 +61,7 @@ class AddonRepository @Inject constructor(
 
 
     suspend fun searchMovies(query: String): List<MetaItem> = withContext(Dispatchers.IO) {
-        if (query.length < 3) return@withContext emptyList()
+        if (query.isBlank()) return@withContext emptyList()
 
         val movieJob = async {
             try {
@@ -93,77 +93,6 @@ class AddonRepository @Inject constructor(
         } catch (_: Exception) { return false }
         val catalog = catalogs.find { it.type == catalogType && it.id == catalogId } ?: return false
         return catalog.extra?.any { it.name == "skip" } ?: false
-    }
-
-    data class DiscoverCatalog(
-        val transportUrl: String,
-        val addonName: String,
-        val type: String,
-        val catalogId: String,
-        val catalogName: String = "",
-        val genres: List<String> = emptyList(),
-        val supportsSkip: Boolean = false
-    )
-
-    suspend fun getDiscoverCatalogs(): List<DiscoverCatalog> = withContext(Dispatchers.IO) {
-        val addons = dao.getAllAddons().firstOrNull()?.filter { it.isEnabled } ?: emptyList()
-        val result = mutableListOf<DiscoverCatalog>()
-
-        for (addon in addons) {
-            val catalogs: List<CatalogManifest> = try {
-                gson.fromJson(addon.catalogsJson, Array<CatalogManifest>::class.java)?.toList()?.filterNotNull() ?: continue
-            } catch (e: Exception) { continue }
-
-            for (catalog in catalogs) {
-                // Skip catalogs with null fields injected by Gson
-                @Suppress("SENSELESS_COMPARISON")
-                if (catalog.name == null || catalog.id == null || catalog.type == null) continue
-
-                // Exclude search-only catalogs (required search extra)
-                val hasRequiredSearch = catalog.extra?.any { it.name == "search" && it.isRequired } ?: false
-                if (hasRequiredSearch) continue
-
-                val genres = catalog.extra
-                    ?.firstOrNull { it.name == "genre" }
-                    ?.options ?: emptyList()
-
-                val supportsSkip = catalog.extra?.any { it.name == "skip" } ?: false
-
-                result.add(DiscoverCatalog(
-                    transportUrl = addon.transportUrl,
-                    addonName = addon.nickname ?: addon.name,
-                    type = catalog.type,
-                    catalogId = catalog.id,
-                    catalogName = catalog.name,
-                    genres = genres,
-                    supportsSkip = supportsSkip
-                ))
-            }
-        }
-        result
-    }
-
-    suspend fun fetchDiscoverPage(
-        transportUrl: String,
-        type: String,
-        catalogId: String,
-        genre: String? = null,
-        skip: Int = 0
-    ): List<MetaItem> = withContext(Dispatchers.IO) {
-        // Build extras as a single path segment joined by '&', matching Stremio protocol
-        val extras = mutableListOf<String>()
-        if (!genre.isNullOrEmpty()) extras.add("genre=${java.net.URLEncoder.encode(genre, "UTF-8")}")
-        if (skip > 0) extras.add("skip=$skip")
-
-        val url = if (extras.isEmpty()) {
-            "$transportUrl/catalog/$type/$catalogId.json"
-        } else {
-            "$transportUrl/catalog/$type/$catalogId/${extras.joinToString("&")}.json"
-        }
-
-        try {
-            withTimeout(CATALOG_TIMEOUT_MS) { api.getCatalog(url) }.metas.orEmpty().sanitize()
-        } catch (e: Exception) { emptyList() }
     }
 
     suspend fun getDashboardRows(
