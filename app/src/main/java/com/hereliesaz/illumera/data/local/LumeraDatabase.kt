@@ -7,6 +7,7 @@ import com.hereliesaz.illumera.data.model.CatalogConfigEntity
 import com.hereliesaz.illumera.data.model.HubRowEntity
 import com.hereliesaz.illumera.data.model.HubRowItemEntity
 import com.hereliesaz.illumera.data.model.ProfileEntity
+import com.hereliesaz.illumera.data.model.RecentSearchEntity
 import com.hereliesaz.illumera.data.model.ThemeEntity
 import com.hereliesaz.illumera.data.model.SeriesNextUpEntity
 import com.hereliesaz.illumera.data.model.WatchHistoryEntity
@@ -23,9 +24,10 @@ import com.hereliesaz.illumera.data.model.WatchlistEntity
         HubRowEntity::class,
         HubRowItemEntity::class,
         WatchlistEntity::class,
-        SeriesNextUpEntity::class
+        SeriesNextUpEntity::class,
+        RecentSearchEntity::class
     ],
-    version = 44
+    version = 45
 )
 abstract class LumeraDatabase : RoomDatabase() {
     abstract fun addonDao(): AddonDao

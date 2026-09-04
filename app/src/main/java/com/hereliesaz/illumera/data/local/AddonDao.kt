@@ -12,6 +12,7 @@ import com.hereliesaz.illumera.data.model.HubRowEntity
 import com.hereliesaz.illumera.data.model.HubRowWithItems
 import com.hereliesaz.illumera.data.model.HubRowItemEntity
 import com.hereliesaz.illumera.data.model.ProfileEntity
+import com.hereliesaz.illumera.data.model.RecentSearchEntity
 import com.hereliesaz.illumera.data.model.ThemeEntity
 import com.hereliesaz.illumera.data.model.SeriesNextUpEntity
 import com.hereliesaz.illumera.data.model.WatchHistoryEntity
@@ -279,6 +280,21 @@ interface AddonDao {
 
     @Query("DELETE FROM watchlist WHERE profileId = :profileId AND id = :id")
     suspend fun removeFromWatchlist(profileId: Int, id: String)
+
+    // ── Recent searches ──
+
+    @Query("SELECT * FROM recent_searches WHERE profileId = :profileId ORDER BY searchedAt DESC LIMIT :limit")
+    suspend fun getRecentSearches(profileId: Int, limit: Int = 12): List<RecentSearchEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertRecentSearch(entry: RecentSearchEntity)
+
+    // Keeps the table from growing unbounded — run alongside every upsert.
+    @Query(
+        "DELETE FROM recent_searches WHERE profileId = :profileId AND query NOT IN " +
+            "(SELECT query FROM recent_searches WHERE profileId = :profileId ORDER BY searchedAt DESC LIMIT :keep)"
+    )
+    suspend fun trimRecentSearches(profileId: Int, keep: Int = 20)
 
     @Transaction
     suspend fun replaceRuntimeState(

@@ -1007,7 +1007,6 @@ class MainActivity : ComponentActivity() {
                         val searchMoviesViewMoreRequester = remember { FocusRequester() }
                         val searchSeriesViewMoreRequester = remember { FocusRequester() }
                         val searchResultsRequester = remember { FocusRequester() }
-                        val searchDiscoverRequester = remember { FocusRequester() }
                         var searchFocusTarget by remember { mutableStateOf<String?>(null) }
                         var searchLastFocusedId by remember { mutableStateOf<String?>(null) }
 
@@ -1038,7 +1037,6 @@ class MainActivity : ComponentActivity() {
                                             "movies" -> searchMoviesViewMoreRequester.requestFocus()
                                             "series" -> searchSeriesViewMoreRequester.requestFocus()
                                             "poster" -> searchResultsRequester.requestFocus()
-                                            "discover" -> searchDiscoverRequester.requestFocus()
                                         }
                                     } else {
                                         searchEntryRequester.requestFocus()
@@ -1221,26 +1219,8 @@ class MainActivity : ComponentActivity() {
                                                         moviesViewMoreRequester = searchMoviesViewMoreRequester,
                                                         seriesViewMoreRequester = searchSeriesViewMoreRequester,
                                                         resultsRequester = searchResultsRequester,
-                                                        discoverRequester = searchDiscoverRequester,
                                                         lastFocusedId = searchLastFocusedId,
                                                         onFocusedIdChange = { searchLastFocusedId = it },
-                                                        onDiscoverClick = { movie ->
-                                                            selectedMovieId = movie.id
-                                                            selectedMovieType = movie.type
-                                                            selectedMovieTitle = movie.name
-                                                            selectedMoviePoster = movie.poster ?: ""
-                                                            selectedMovieBackground = movie.background ?: ""
-                                                            selectedMovieLogo = movie.logo ?: ""
-                                                            selectedAddonBaseUrl = movie.addonBaseUrl
-                                                            detailsResumePlaybackHint = null
-                                                            selectedPlaybackId = movie.id
-                                                            selectedPlaybackType = movie.type
-                                                            selectedPlaybackTitle = movie.name
-                                                            selectedPlaybackPoster = movie.poster ?: ""
-                                                            searchFocusTarget = "discover"
-                                                            previousView = "menu"
-                                                            activeView = "details"
-                                                        },
                                                         entryRequester = searchEntryRequester,
                                                         drawerRequester = drawerRequesters[NavDestination.Search]!!
                                                     )
@@ -1383,26 +1363,8 @@ class MainActivity : ComponentActivity() {
                                                         moviesViewMoreRequester = searchMoviesViewMoreRequester,
                                                         seriesViewMoreRequester = searchSeriesViewMoreRequester,
                                                         resultsRequester = searchResultsRequester,
-                                                        discoverRequester = searchDiscoverRequester,
                                                         lastFocusedId = searchLastFocusedId,
                                                         onFocusedIdChange = { searchLastFocusedId = it },
-                                                        onDiscoverClick = { movie ->
-                                                            selectedMovieId = movie.id
-                                                            selectedMovieType = movie.type
-                                                            selectedMovieTitle = movie.name
-                                                            selectedMoviePoster = movie.poster ?: ""
-                                                            selectedMovieBackground = movie.background ?: ""
-                                                            selectedMovieLogo = movie.logo ?: ""
-                                                            selectedAddonBaseUrl = movie.addonBaseUrl
-                                                            detailsResumePlaybackHint = null
-                                                            selectedPlaybackId = movie.id
-                                                            selectedPlaybackType = movie.type
-                                                            selectedPlaybackTitle = movie.name
-                                                            selectedPlaybackPoster = movie.poster ?: ""
-                                                            searchFocusTarget = "discover"
-                                                            previousView = "menu"
-                                                            activeView = "details"
-                                                        },
                                                         entryRequester = searchEntryRequester,
                                                         drawerRequester = drawerRequesters[NavDestination.Search]!!
                                                     )
